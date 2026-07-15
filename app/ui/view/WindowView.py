@@ -6,37 +6,138 @@
 @Author  : DoooReyn<jl88744653@gmail.com>
 @Desc    : 主视图
 """
-from typing import Optional
+from typing import Any, Dict, Optional
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QDateTime, Qt, QTime, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QApplication,
+    QFrame,
+    QHBoxLayout,
     QLabel,
     QMainWindow,
     QMenu,
-    QStatusBar,
+    QPushButton,
+    QSlider,
     QSystemTrayIcon,
-    QToolBar, QApplication, QLineEdit
+    QVBoxLayout,
+    QWidget,
 )
 
 from conf.Lang import LanguageKeys
-from conf.Menus import MainToolbar, MainTray
 from conf.ResMap import ResMap
 from conf.Views import Views
 from helper.Cmm import Cmm
 from helper.GUI import GUI
 from helper.I18n import I18n
-from helper.NetHelper import NetHelper
 from helper.Preferences import UserKey, gPreferences
 from helper.Signals import gSignals
 from ui.model.CefModel import CefModel
 from ui.view.CefView import CefView
-from ui.view.NoticeView import NoticeView, ContentFillType
-from ui.view.OptionsView import OptionsView
-from ui.view.SponsorView import SponsorView
-from ui.view.ToolbarAction import ScrollableAction, PinnedAction, SpeedDwAction, SpeedUpAction
-from ui.view.ViewDelegate import ViewDelegate
 from ui.view.TimingView import TimingView
-from PySide6.QtCore import QTime
+from ui.view.ViewDelegate import ViewDelegate
+
+
+DAY_MS = 24 * 60 * 60 * 1000
+
+
+APPLE_STYLE = """
+QMainWindow {
+    background: #f5f5f7;
+}
+QWidget#RootSurface {
+    background: #f5f5f7;
+}
+QFrame#ControlPanel {
+    background: #fbfbfd;
+    border-bottom: 1px solid #d8d8dc;
+}
+QFrame#StatusPill {
+    background: #f0f0f3;
+    border: 1px solid #dedee3;
+    border-radius: 14px;
+}
+QFrame#StatusPill[active="true"] {
+    background: #e8f7ee;
+    border-color: #a8dfba;
+}
+QLabel#AppTitle {
+    color: #1d1d1f;
+    font-size: 18px;
+    font-weight: 600;
+}
+QLabel#AppSubtitle,
+QLabel#Caption,
+QLabel#MetaText {
+    color: #6e6e73;
+    font-size: 12px;
+}
+QLabel#StatusText {
+    color: #1d1d1f;
+    font-size: 13px;
+    font-weight: 500;
+}
+QPushButton {
+    min-height: 30px;
+    padding: 5px 13px;
+    border-radius: 8px;
+    border: 1px solid #d2d2d7;
+    background: #ffffff;
+    color: #1d1d1f;
+    font-size: 13px;
+}
+QPushButton:hover {
+    background: #f6f6f8;
+}
+QPushButton:pressed {
+    background: #ededf0;
+}
+QPushButton#PrimaryButton {
+    min-height: 34px;
+    padding: 6px 18px;
+    border: 1px solid #0071e3;
+    background: #0071e3;
+    color: #ffffff;
+    font-weight: 600;
+}
+QPushButton#PrimaryButton:hover {
+    background: #147ce5;
+}
+QPushButton#PrimaryButton:checked {
+    border-color: #d84a3a;
+    background: #d84a3a;
+}
+QPushButton#QuietButton {
+    background: transparent;
+    border-color: transparent;
+    color: #424245;
+}
+QPushButton#QuietButton:hover {
+    background: #ededf0;
+    border-color: #ededf0;
+}
+QSlider::groove:horizontal {
+    height: 4px;
+    border-radius: 2px;
+    background: #d2d2d7;
+}
+QSlider::sub-page:horizontal {
+    height: 4px;
+    border-radius: 2px;
+    background: #0071e3;
+}
+QSlider::handle:horizontal {
+    width: 18px;
+    height: 18px;
+    margin: -7px 0;
+    border-radius: 9px;
+    border: 1px solid #c7c7cc;
+    background: #ffffff;
+}
+QSlider::handle:horizontal:hover {
+    border-color: #0071e3;
+}
+"""
 
 
 class _View(ViewDelegate):
@@ -45,80 +146,111 @@ class _View(ViewDelegate):
     def __init__(self, win, code, key):
         super(_View, self).__init__(win, code, key)
 
-        # 工具栏
-        # noinspection PyTypeChecker
-        self.ui_tool_bar = QToolBar(self.view)
-        self.ui_tool_bar.setFloatable(False)
-        self.ui_tool_bar.setMovable(False)
-        self.ui_tool_bar.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-        self.ui_tool_bar.setAllowedAreas(Qt.ToolBarArea.TopToolBarArea)
-        self.ui_tool_bar.setContextMenuPolicy(Qt.PreventContextMenu)
-        self.ui_tool_bar.setToolButtonStyle(Qt.ToolButtonTextUnderIcon)
-        self.ui_act_help = self.addActionBy(MainToolbar.ActionHelp, self.ui_tool_bar)
-        self.ui_act_about = self.addActionBy(MainToolbar.ActionAbout, self.ui_tool_bar)
-        self.ui_act_sponsor = self.addActionBy(MainToolbar.ActionSponsor, self.ui_tool_bar)
-        self.ui_act_back_home = self.addActionBy(MainToolbar.ActionBackHome, self.ui_tool_bar)
-        self.ui_act_refresh = self.addActionBy(MainToolbar.ActionRefresh, self.ui_tool_bar)
-        self.ui_act_pinned = self.addActionBy(MainToolbar.ActionPinned, self.ui_tool_bar)
-        self.ui_act_export = self.addActionBy(MainToolbar.ActionExport, self.ui_tool_bar)
-        self.ui_act_theme = self.addActionBy(MainToolbar.ActionTheme, self.ui_tool_bar)
-        self.ui_act_auto = self.addActionBy(MainToolbar.ActionAuto, self.ui_tool_bar)
-        self.ui_act_screen = self.addActionBy(MainToolbar.ActionFullscreen, self.ui_tool_bar)
-        self.ui_act_profile = self.addActionBy(MainToolbar.ActionProfile, self.ui_tool_bar)
-        self.ui_act_speed_dw = self.addActionBy(MainToolbar.ActionSpeedDw, self.ui_tool_bar)
-        self.ui_act_speed_up = self.addActionBy(MainToolbar.ActionSpeedUp, self.ui_tool_bar)
-        self.ui_act_timing = self.addActionBy(MainToolbar.ActionTiming, self.ui_tool_bar)
-        self.ui_act_quit = self.addActionBy(MainToolbar.ActionQuit, self.ui_tool_bar)
+        self.ui_root = QWidget(self.view)
+        self.ui_root.setObjectName("RootSurface")
 
+        self.ui_layout = QVBoxLayout(self.ui_root)
+        self.ui_layout.setContentsMargins(0, 0, 0, 0)
+        self.ui_layout.setSpacing(0)
 
-        self.ui_act_back_home.setToolTip(I18n.text(LanguageKeys.tooltip_back_home))
-        self.ui_act_refresh.setToolTip(I18n.text(LanguageKeys.tooltip_refresh))
-        self.ui_act_auto.setToolTip(I18n.text(LanguageKeys.tooltip_auto))
-        self.ui_act_speed_dw.setToolTip(I18n.text(LanguageKeys.tooltip_speed_dw))
-        self.ui_act_speed_up.setToolTip(I18n.text(LanguageKeys.tooltip_speed_up))
-        self.ui_act_theme.setToolTip(I18n.text(LanguageKeys.tooltip_theme))
-        self.ui_act_export.setToolTip(I18n.text(LanguageKeys.tooltip_export))
-        self.ui_act_screen.setToolTip(I18n.text(LanguageKeys.tooltip_fullscreen))
-        self.ui_act_profile.setToolTip(I18n.text(LanguageKeys.tooltip_profile))
-        self.ui_act_about.setToolTip(I18n.text(LanguageKeys.tooltip_about))
-        self.ui_act_help.setToolTip(I18n.text(LanguageKeys.tooltip_help))
-        self.ui_act_sponsor.setToolTip(I18n.text(LanguageKeys.tooltip_sponsor))
-        self.ui_act_pinned.setToolTip(I18n.text(LanguageKeys.tooltip_pinned))
-        self.ui_act_timing.setToolTip(I18n.text(LanguageKeys.tooltip_timing))
-        self.ui_act_quit.setToolTip(I18n.text(LanguageKeys.tooltip_quit))
+        self.ui_panel = QFrame(self.ui_root)
+        self.ui_panel.setObjectName("ControlPanel")
+        self.ui_panel_layout = QVBoxLayout(self.ui_panel)
+        self.ui_panel_layout.setContentsMargins(18, 14, 18, 14)
+        self.ui_panel_layout.setSpacing(12)
+
+        self.ui_title = QLabel("微读自动阅读")
+        self.ui_title.setObjectName("AppTitle")
+        self.ui_subtitle = QLabel("只保留自动阅读控制，网页区域用于登录和打开书籍")
+        self.ui_subtitle.setObjectName("AppSubtitle")
+
+        self.ui_title_box = QVBoxLayout()
+        self.ui_title_box.setContentsMargins(0, 0, 0, 0)
+        self.ui_title_box.setSpacing(2)
+        self.ui_title_box.addWidget(self.ui_title)
+        self.ui_title_box.addWidget(self.ui_subtitle)
+
+        self.ui_status_pill = QFrame()
+        self.ui_status_pill.setObjectName("StatusPill")
+        self.ui_status_pill.setProperty("active", False)
+        self.ui_status_layout = QHBoxLayout(self.ui_status_pill)
+        self.ui_status_layout.setContentsMargins(10, 4, 10, 4)
+        self.ui_status_layout.setSpacing(6)
+        self.ui_status_dot = QLabel("●")
+        self.ui_status_dot.setObjectName("MetaText")
+        self.ui_status_text = QLabel("待机")
+        self.ui_status_text.setObjectName("StatusText")
+        self.ui_status_layout.addWidget(self.ui_status_dot)
+        self.ui_status_layout.addWidget(self.ui_status_text)
+
+        self.ui_act_auto = QPushButton("开始自动阅读")
+        self.ui_act_auto.setObjectName("PrimaryButton")
         self.ui_act_auto.setCheckable(True)
-        self.ui_act_theme.setEnabled(False)
+        self.ui_act_auto.setToolTip("切换自动阅读    F10")
 
-        # stateful actions
-        self.stateful_act_auto = ScrollableAction(self.ui_act_auto)
-        self.stateful_act_pinned = PinnedAction(self.ui_act_pinned, self.ui_tool_bar)
-        self.stateful_act_speed_up = SpeedUpAction(self.ui_act_speed_up)
-        self.stateful_act_speed_dw = SpeedDwAction(self.ui_act_speed_dw)
+        self.ui_act_home = QPushButton("首页")
+        self.ui_act_home.setToolTip("回到微信读书首页    F4")
+        self.ui_act_refresh = QPushButton("刷新")
+        self.ui_act_refresh.setToolTip("刷新当前页面    F5")
+        self.ui_act_timing = QPushButton("定时")
+        self.ui_act_timing.setToolTip("设置每日任务和计时器    F12")
+        self.ui_act_quit = QPushButton("退出")
+        self.ui_act_quit.setObjectName("QuietButton")
+        self.ui_act_quit.setToolTip("退出应用    Alt+Q")
 
-        # 状态栏
-        # noinspection PyTypeChecker
-        self.ui_status_bar = QStatusBar(self.view)
-        self.ui_lab_status = QLabel('')
-        self.ui_edit_url = QLineEdit('')
-        self.ui_edit_url.setReadOnly(True)
-        self.ui_edit_url.setStyleSheet("QLineEdit { border: none; background-color: #f0f0f0;}")
-        self.ui_lab_speed = QLabel('')
-        self.ui_status_bar.addPermanentWidget(self.ui_lab_status, 1)
-        self.ui_status_bar.addPermanentWidget(self.ui_edit_url, 8)
-        self.ui_status_bar.addPermanentWidget(self.ui_lab_speed, 1)
+        self.ui_speed_caption = QLabel("速度")
+        self.ui_speed_caption.setObjectName("Caption")
+        self.ui_speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self.ui_speed_slider.setMinimum(1)
+        self.ui_speed_slider.setMaximum(100)
+        self.ui_speed_slider.setSingleStep(1)
+        self.ui_speed_slider.setPageStep(5)
+        self.ui_speed_slider.setMinimumWidth(260)
+        self.ui_speed_value = QLabel("")
+        self.ui_speed_value.setObjectName("StatusText")
+        self.ui_speed_value.setMinimumWidth(30)
+        self.ui_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
-        # 系统托盘
+        self.ui_header_row = QHBoxLayout()
+        self.ui_header_row.setContentsMargins(0, 0, 0, 0)
+        self.ui_header_row.setSpacing(12)
+        self.ui_header_row.addLayout(self.ui_title_box, 1)
+        self.ui_header_row.addWidget(self.ui_status_pill, 0, Qt.AlignmentFlag.AlignRight)
+
+        self.ui_primary_actions = QHBoxLayout()
+        self.ui_primary_actions.setContentsMargins(0, 0, 0, 0)
+        self.ui_primary_actions.setSpacing(8)
+        self.ui_primary_actions.addWidget(self.ui_act_auto)
+        self.ui_primary_actions.addWidget(self.ui_act_home)
+        self.ui_primary_actions.addWidget(self.ui_act_refresh)
+        self.ui_primary_actions.addWidget(self.ui_act_timing)
+        self.ui_primary_actions.addWidget(self.ui_act_quit)
+        self.ui_primary_actions.addStretch(1)
+
+        self.ui_speed_row = QHBoxLayout()
+        self.ui_speed_row.setContentsMargins(0, 0, 0, 0)
+        self.ui_speed_row.setSpacing(10)
+        self.ui_speed_row.addWidget(self.ui_speed_caption)
+        self.ui_speed_row.addWidget(self.ui_speed_slider, 1)
+        self.ui_speed_row.addWidget(self.ui_speed_value)
+
+        self.ui_panel_layout.addLayout(self.ui_header_row)
+        self.ui_panel_layout.addLayout(self.ui_primary_actions)
+        self.ui_panel_layout.addLayout(self.ui_speed_row)
+
+        self.ui_cef = CefView(self.ui_root)
+
+        self.ui_layout.addWidget(self.ui_panel)
+        self.ui_layout.addWidget(self.ui_cef, 1)
+
         self.ui_tray = QSystemTrayIcon(self.view)
         self.ui_tray.setIcon(GUI.icon(ResMap.icon_app))
         self.ui_tray_menu = QMenu(self.view)
-        self.addActionBy(MainTray.ActionHelp, self.ui_tray_menu)
-        self.addActionBy(MainTray.ActionQuit, self.ui_tray_menu)
+        self.ui_tray_quit = QAction("退出", self.ui_tray_menu)
+        self.ui_tray_menu.addAction(self.ui_tray_quit)
         self.ui_tray.setContextMenu(self.ui_tray_menu)
-        self.ui_tray.setToolTip(I18n.text(LanguageKeys.app_name))
+        self.ui_tray.setToolTip("微读自动阅读")
         self.ui_tray.show()
-
-        # Webview
-        self.ui_cef = CefView(self.view)
 
 
 class WindowView(QMainWindow):
@@ -130,6 +262,9 @@ class WindowView(QMainWindow):
         self.timer_cef: Optional[QTimer] = None
         self.timer_reading: Optional[QTimer] = None
         self.timer_timing: Optional[QTimer] = None
+        self.schedule_owned_reading = False
+        self.schedule_suppressed_until_exit = False
+        self.countdown_deadline_ms: Optional[int] = None
         self.view = _View(self, Views.Main, UserKey.General.WinRect)
 
         self.setupUi()
@@ -142,102 +277,109 @@ class WindowView(QMainWindow):
         """初始化 UI"""
         self.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
         self.setAttribute(Qt.WidgetAttribute.WA_StaticContents, True)
-        self.setMinimumSize(640, 480)
-        self.setFocusPolicy(Qt.StrongFocus)
-        self.setWindowTitle(I18n.text(LanguageKeys.app_name))
+        self.setMinimumSize(900, 600)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setWindowTitle("微读自动阅读")
         self.setWindowIcon(GUI.icon(ResMap.icon_app))
-        self.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.view.ui_tool_bar)
-        self.setStatusBar(self.view.ui_status_bar)
-        self.view.ui_cef.resize(self.size())
+        self.setStyleSheet(APPLE_STYLE)
+        self.setCentralWidget(self.view.ui_root)
         self.view.ui_cef.embedBrowser()
-        self.view.ui_edit_url.setText(gPreferences.get(UserKey.Reader.LatestUrl))
-        self.view.stateful_act_auto.onLoad()
-        self.view.stateful_act_pinned.onLoad()
+        self.view.ui_act_auto.setChecked(gPreferences.get(UserKey.Reader.Scrollable))
+        self.view.ui_speed_slider.setValue(gPreferences.get(UserKey.Reader.Speed))
         self.refreshSpeed()
-        self.setCentralWidget(self.view.ui_cef)
+        self.refreshAutoState()
+        if self.width() < 900 or self.height() < 600:
+            self.resize(max(self.width(), 1040), max(self.height(), 700))
+        QTimer.singleShot(0, self.syncCefGeometry)
+        QTimer.singleShot(120, self.syncCefGeometry)
 
     def setupSignals(self):
         """关联信号"""
-        # noinspection PyUnresolvedReferences
         self.view.ui_tray.activated.connect(self.onTrayActivated)
-        gSignals.cef_load_start.connect(self.onLoadPage)
-        gSignals.cef_update_state.connect(self.onLoadPage)
-        gSignals.cef_load_finished.connect(self.onLoadPage)
+        self.view.ui_tray_quit.triggered.connect(self.onToolbarQuit)
+        self.view.ui_act_auto.clicked.connect(self.onToolbarSetAuto)
+        self.view.ui_act_home.clicked.connect(self.onToolbarBackHome)
+        self.view.ui_act_refresh.clicked.connect(self.onToolbarReload)
+        self.view.ui_act_timing.clicked.connect(self.onToolbarTiming)
+        self.view.ui_act_quit.clicked.connect(self.onToolbarQuit)
+        self.view.ui_speed_slider.valueChanged.connect(self.onSpeedChanged)
         gSignals.cef_short_cut.connect(self.onShortcutActivated)
         gSignals.reader_refresh_speed.connect(self.refreshSpeed)
         gSignals.reader_status_tip_updated.connect(self.refreshStatusTip)
         gSignals.reader_reading_finished.connect(self.onBookFinished)
+        gSignals.timing_tasks_changed.connect(self.onTimingTasksChanged)
+        gSignals.timing_countdown_started.connect(self.onCountdownStarted)
+        gSignals.timing_countdown_stopped.connect(self.onCountdownStopped)
 
     def refreshStatusTip(self, tip: str):
-        """刷新状态栏提示"""
-        self.view.ui_lab_status.setText(tip)
+        """刷新状态提示"""
+        if tip:
+            self.view.ui_status_text.setText(tip)
+        elif self.view.ui_act_auto.isChecked():
+            self.view.ui_status_text.setText(I18n.text(LanguageKeys.tips_auto_read_on))
+        else:
+            self.view.ui_status_text.setText("待机")
+
+    def refreshAutoState(self):
+        """刷新自动阅读状态 UI"""
+        checked = self.view.ui_act_auto.isChecked()
+        self.view.ui_act_auto.setText("暂停自动阅读" if checked else "开始自动阅读")
+        self.view.ui_status_pill.setProperty("active", checked)
+        self.view.ui_status_dot.setText("●")
+        self.view.ui_status_dot.setStyleSheet("color: #34c759;" if checked else "color: #8e8e93;")
+        self.view.ui_status_pill.style().unpolish(self.view.ui_status_pill)
+        self.view.ui_status_pill.style().polish(self.view.ui_status_pill)
+        self.refreshStatusTip("")
 
     def onBookFinished(self):
         """全书完"""
-        self.view.ui_act_auto.setChecked(False)
-        self.view.stateful_act_auto.onChanged()
+        self.schedule_owned_reading = False
+        self.countdown_deadline_ms = None
+        self.setAutoReading(False, "已读完")
         self.activateWindow()
         self.showNormal()
         Cmm.playBeep()
-        NetHelper.httpGet(gPreferences.get(UserKey.Profile.NoticeUrl))
 
     def onShortcutActivated(self, shortcut: int):
         """
         快捷键响应
-        - 因为 Cef 会吞噬 Qt 事件，所以触发不了快捷键
-        - 所以，在 Cef 层监听快捷键再发送给 Qt 去执行
+        - CEF 会吞噬 Qt 事件，所以由 CEF 层监听后转发给 Qt。
         """
         if shortcut == CefModel.ShortCut.Quit:
             self.onToolbarQuit()
         elif shortcut == CefModel.ShortCut.Reload:
             self.onToolbarReload()
-        elif shortcut == CefModel.ShortCut.About:
-            self.onToolbarAbout()
-        elif shortcut == CefModel.ShortCut.Help:
-            self.onToolbarHelp()
-        elif shortcut == CefModel.ShortCut.Sponsor:
-            self.onToolbarSponsor()
-        elif shortcut == CefModel.ShortCut.Options:
-            self.onToolbarProfile()
+        elif shortcut == CefModel.ShortCut.Timing:
+            self.onToolbarTiming()
         elif shortcut == CefModel.ShortCut.SpeedUp:
             self.onToolbarSpeedUp()
         elif shortcut == CefModel.ShortCut.SpeedDown:
             self.onToolbarSpeedDown()
-        elif shortcut == CefModel.ShortCut.Theme:
-            self.onToolbarTheme()
-        elif shortcut == CefModel.ShortCut.Export:
-            self.onToolbarExport()
         elif shortcut == CefModel.ShortCut.Home:
             self.onToolbarBackHome()
-        elif shortcut == CefModel.ShortCut.Fullscreen:
-            self.onToolbarFullscreen()
         elif shortcut == CefModel.ShortCut.Auto:
             self.onToolbarAuto()
-        elif shortcut == CefModel.ShortCut.Pinned:
-            self.onToolbarPinned()
         else:
-            print(f'未知的快捷键: {shortcut}')
+            print(f'已移除的快捷键: {shortcut}')
 
     def refreshSpeed(self):
-        """刷新状态栏阅读速度"""
+        """刷新阅读速度"""
         speed = gPreferences.get(UserKey.Reader.Speed)
-        self.view.ui_lab_speed.setText(I18n.text(LanguageKeys.tips_speed).format(speed))
-
-    def onLoadPage(self):
-        """更新页面网址"""
-        self.view.ui_edit_url.setText(self.view.ui_cef.url())
+        if self.view.ui_speed_slider.value() != speed:
+            self.view.ui_speed_slider.blockSignals(True)
+            self.view.ui_speed_slider.setValue(speed)
+            self.view.ui_speed_slider.blockSignals(False)
+        self.view.ui_speed_value.setText(str(speed))
 
     def setupCefTimer(self):
         """启动 CEF 更新定时器"""
         self.timer_cef = QTimer()
-        # noinspection PyUnresolvedReferences
         self.timer_cef.timeout.connect(self.onRunCef)
         self.timer_cef.start(CefModel.MS_CEF)
 
     def setupReadingTimer(self):
         """启动阅读器更新定时器"""
         self.timer_reading = QTimer()
-        # noinspection PyUnresolvedReferences
         self.timer_reading.timeout.connect(self.onAutoReading)
         self.timer_reading.start(CefModel.MS_AUTO)
 
@@ -245,11 +387,15 @@ class WindowView(QMainWindow):
         """启动定时阅读功能定时器"""
         self.timer_timing = QTimer()
         self.timer_timing.timeout.connect(self.onTimingReading)
-        self.timer_timing.start(100)
+        self.timer_timing.start(1000)
 
     def onRunCef(self):
         """CEF 更新"""
         self.view.ui_cef.runLoop()
+
+    def syncCefGeometry(self):
+        """同步 CEF 子窗口尺寸，避免首次显示时缩在左上角。"""
+        self.view.ui_cef.syncBrowserGeometry()
 
     def stopCef(self):
         """停止 CEF 更新"""
@@ -258,30 +404,123 @@ class WindowView(QMainWindow):
         self.view.ui_cef.quit()
 
     def onToolbarAuto(self):
-        """模拟工具栏的自动阅读点击"""
+        """模拟自动阅读点击"""
         checked = self.view.ui_act_auto.isChecked()
         self.view.ui_act_auto.setChecked(not checked)
         self.onToolbarSetAuto()
 
-    def onTimingReading(self):
-        """定时阅读功能"""        
-        isOpen = gPreferences.get(UserKey.Timing.EveryDay)        
-        if isOpen:
-            currentTime = QTime.currentTime().toString("hh:mm:ss")
-            startTime = QTime.fromMSecsSinceStartOfDay(gPreferences.get(UserKey.Timing.StartTime)).toString("hh:mm:ss")
-            stopTime = QTime.fromMSecsSinceStartOfDay(gPreferences.get(UserKey.Timing.StopTime)).toString("hh:mm:ss")
-        
-            if currentTime == startTime:
-                checked = self.view.ui_act_auto.isChecked()
-                if not checked:                                            
-                    self.onToolbarAuto()
-            elif currentTime == stopTime:                
-                checked = self.view.ui_act_auto.isChecked()
-                if checked: 
-                    self.onToolbarAuto()                
-            else:
-                pass
+    def setAutoReading(self, checked: bool, tip: str = "", trigger_cef: bool = True):
+        """统一切换自动阅读状态。"""
+        self.view.ui_act_auto.setChecked(checked)
+        gPreferences.set(UserKey.Reader.Scrollable, checked)
+        if trigger_cef:
+            self.view.ui_cef.doAuto()
+        self.refreshAutoState()
+        if tip:
+            self.refreshStatusTip(tip)
 
+    def getTimingSegments(self):
+        """读取并清洗每日任务时间段。"""
+        raw_segments = gPreferences.get(UserKey.Timing.Segments)
+        if not isinstance(raw_segments, list):
+            return []
+
+        segments = []
+        for item in raw_segments:
+            if not isinstance(item, dict):
+                continue
+            try:
+                start = int(item.get('start'))
+                stop = int(item.get('stop'))
+            except (TypeError, ValueError):
+                continue
+            if start == stop or start < 0 or stop < 0 or start >= DAY_MS or stop >= DAY_MS:
+                continue
+            segments.append({
+                'start': start,
+                'stop': stop,
+                'enabled': bool(item.get('enabled', True)),
+            })
+        return segments
+
+    @staticmethod
+    def isTimeInSegment(now_ms: int, segment: Dict[str, Any]) -> bool:
+        """支持跨午夜时间段。"""
+        start = segment['start']
+        stop = segment['stop']
+        if start < stop:
+            return start <= now_ms < stop
+        return now_ms >= start or now_ms < stop
+
+    def isInsideTimingSegmentNow(self) -> bool:
+        if not gPreferences.get(UserKey.Timing.Enabled):
+            return False
+
+        now_ms = QTime.currentTime().msecsSinceStartOfDay()
+        return any(
+            segment.get('enabled', True) and self.isTimeInSegment(now_ms, segment)
+            for segment in self.getTimingSegments()
+        )
+
+    def onTimingReading(self):
+        """定时阅读状态机。"""
+        self.handleCountdown()
+        self.handleTimingTasks()
+
+    def handleTimingTasks(self):
+        """根据每日时间段启动或停止自动阅读。"""
+        enabled = gPreferences.get(UserKey.Timing.Enabled)
+        inside_segment = self.isInsideTimingSegmentNow() if enabled else False
+
+        if not inside_segment:
+            self.schedule_suppressed_until_exit = False
+            if self.schedule_owned_reading:
+                self.schedule_owned_reading = False
+                if self.view.ui_act_auto.isChecked():
+                    self.setAutoReading(False, "每日任务结束，已停止")
+            return
+
+        if self.schedule_suppressed_until_exit:
+            return
+
+        if not self.view.ui_act_auto.isChecked():
+            self.schedule_owned_reading = True
+            self.setAutoReading(True, "每日任务阅读中")
+        elif self.schedule_owned_reading:
+            self.refreshStatusTip("每日任务阅读中")
+
+    def handleCountdown(self):
+        """计时器到点后停止阅读。"""
+        if self.countdown_deadline_ms is None:
+            return
+
+        if QDateTime.currentMSecsSinceEpoch() < self.countdown_deadline_ms:
+            return
+
+        self.countdown_deadline_ms = None
+        self.schedule_owned_reading = False
+        self.schedule_suppressed_until_exit = self.isInsideTimingSegmentNow()
+        if self.view.ui_act_auto.isChecked():
+            self.setAutoReading(False, "计时结束，已停止")
+        else:
+            self.refreshStatusTip("计时结束")
+        Cmm.playBeep()
+
+    def onTimingTasksChanged(self):
+        """定时任务变更后立即重新评估。"""
+        self.handleTimingTasks()
+
+    def onCountdownStarted(self, minutes: int):
+        """启动一次性计时阅读。"""
+        self.countdown_deadline_ms = QDateTime.currentMSecsSinceEpoch() + max(1, int(minutes)) * 60 * 1000
+        self.schedule_owned_reading = False
+        self.schedule_suppressed_until_exit = False
+        self.setAutoReading(True, "计时阅读中")
+
+    def onCountdownStopped(self):
+        """取消计时器，不改变当前阅读状态。"""
+        self.countdown_deadline_ms = None
+        self.refreshStatusTip("")
 
     def onAutoReading(self):
         """阅读器更新"""
@@ -296,7 +535,14 @@ class WindowView(QMainWindow):
     def resizeEvent(self, event):
         """视图尺寸变化事件"""
         self.view.resizeEvent(event)
+        QTimer.singleShot(0, self.syncCefGeometry)
         super(WindowView, self).resizeEvent(event)
+
+    def showEvent(self, event):
+        """窗口显示后再同步一次 CEF 尺寸。"""
+        super(WindowView, self).showEvent(event)
+        QTimer.singleShot(0, self.syncCefGeometry)
+        QTimer.singleShot(120, self.syncCefGeometry)
 
     def onTrayActivated(self, reason: QSystemTrayIcon.ActivationReason):
         """系统托盘图标触发事件"""
@@ -304,13 +550,7 @@ class WindowView(QMainWindow):
                       QSystemTrayIcon.ActivationReason.MiddleClick,
                       QSystemTrayIcon.ActivationReason.Trigger):
             self.activateWindow()
-            if self.isFullScreen():
-                self.showFullScreen()
-            else:
-                if self.isMaximized():
-                    self.showMaximized()
-                else:
-                    self.showNormal()
+            self.showMaximized() if self.isMaximized() else self.showNormal()
 
     def onToolbarQuit(self):
         """退出阅读"""
@@ -325,73 +565,26 @@ class WindowView(QMainWindow):
         """重新加载"""
         self.view.ui_cef.doReload()
 
-    def onToolbarExport(self):
-        """导出笔记"""
-        self.view.ui_cef.doExport()
-
-    def onToolbarTheme(self):
-        """切换主题"""
-        self.view.ui_cef.doTheme()
-
     def onToolbarSetAuto(self):
         """切换自动阅读"""
-        self.view.stateful_act_auto.onChanged()
-        self.view.ui_cef.doAuto()
-        if not self.view.ui_act_auto.isChecked():
-            self.refreshStatusTip("")
-
-    def onToolbarFullscreen(self):
-        """切换全屏"""
-        if self.isFullScreen():
-            self.showNormal()
-        else:
-            self.showFullScreen()
+        checked = self.view.ui_act_auto.isChecked()
+        self.schedule_owned_reading = False
+        self.schedule_suppressed_until_exit = (not checked) and self.isInsideTimingSegmentNow()
+        self.setAutoReading(checked)
 
     def onToolbarSpeedUp(self):
         """提高速度"""
-        self.view.stateful_act_speed_up.onChanged()
-        self.view.ui_cef.doSpeed()
-        self.refreshSpeed()
+        self.view.ui_speed_slider.setValue(min(100, self.view.ui_speed_slider.value() + 1))
 
     def onToolbarSpeedDown(self):
         """降低速度"""
-        self.view.stateful_act_speed_dw.onChanged()
+        self.view.ui_speed_slider.setValue(max(1, self.view.ui_speed_slider.value() - 1))
+
+    def onSpeedChanged(self, value: int):
+        """速度变化事件"""
+        gPreferences.set(UserKey.Reader.Speed, value)
         self.view.ui_cef.doSpeed()
         self.refreshSpeed()
-
-    def onToolbarPinned(self):
-        """收起工具栏"""
-        self.view.stateful_act_pinned.onChanged()
-
-    @staticmethod
-    def onToolbarSponsor():
-        """打开赞助视图"""
-        SponsorView().exec()
-
-    @staticmethod
-    def onToolbarHelp():
-        """打开帮助视图"""
-        NoticeView(Views.Help,
-                   UserKey.Help.WinRect,
-                   I18n.text(LanguageKeys.toolbar_help),
-                   Cmm.readFile(ResMap.html_help),
-                   ContentFillType.Html
-                   ).exec()
-
-    @staticmethod
-    def onToolbarAbout():
-        """打开关于视图"""
-        NoticeView(Views.About,
-                   UserKey.About.WinRect,
-                   I18n.text(LanguageKeys.toolbar_about),
-                   Cmm.readFile(ResMap.html_about),
-                   ContentFillType.Html
-                   ).exec()
-
-    @staticmethod
-    def onToolbarProfile():
-        """打开选项视图"""
-        OptionsView().exec()
 
     @staticmethod
     def onToolbarTiming():

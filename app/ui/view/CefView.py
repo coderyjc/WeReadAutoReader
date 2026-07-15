@@ -1,6 +1,6 @@
 from typing import Optional
 
-from PySide6.QtWidgets import QWidget, QFileDialog
+from PySide6.QtWidgets import QWidget
 from cefpython3 import cefpython as cef
 
 from conf.Lang import LanguageKeys
@@ -106,7 +106,7 @@ class CefView(QWidget):
     def embedBrowser(self):
         """嵌入 CEF 窗体"""
         window_info = cef.WindowInfo()
-        rect = [0, 0, self.width(), self.height()]
+        rect = [0, 0, max(1, self.width()), max(1, self.height())]
         window_info.SetAsChild(self.handleId(), rect)
 
         # 创建 Webview
@@ -122,8 +122,8 @@ class CefView(QWidget):
         jsb = cef.JavascriptBindings(bindToFrames=True)
         jsb.SetFunction(CefModel.PyMethod.UpdateState, self.updateState)
         jsb.SetFunction(CefModel.PyMethod.SendAction, self.sendAction)
-        jsb.SetFunction(CefModel.PyMethod.SavedNotes, self.savedNotes)
         self.browser.SetJavascriptBindings(jsb)
+        self.syncBrowserGeometry()
 
     def sendAction(self, act: int):
         """执行 JS -> Py 动作"""
@@ -134,13 +134,6 @@ class CefView(QWidget):
                 self.doReadingFinished()
         else:
             print(f"[未知的动作] {act}")
-
-    def savedNotes(self, filename, content):
-        """执行导出笔记"""
-        title = I18n.text(LanguageKeys.tips_export_note)
-        where, _ = QFileDialog.getSaveFileName(self, title, filename, filter='*.md')
-        if len(where) > 0:
-            Cmm.saveAs(where, content)
 
     def handleId(self):
         """CEF 窗口ID"""
@@ -174,12 +167,20 @@ class CefView(QWidget):
 
     def moveEvent(self, _):
         """Webview 移动同步"""
-        if self.browser:
-            cef.WindowUtils().OnSize(self.handleId(), 0, 0, 0)
-            self.browser.NotifyMoveOrResizeStarted()
+        self.syncBrowserGeometry()
 
     def resizeEvent(self, event):
         """窗口尺寸同步"""
+        super(CefView, self).resizeEvent(event)
+        self.syncBrowserGeometry()
+
+    def showEvent(self, event):
+        """窗口显示同步"""
+        super(CefView, self).showEvent(event)
+        self.syncBrowserGeometry()
+
+    def syncBrowserGeometry(self):
+        """同步 CEF 子窗口到 Qt 部件当前尺寸。"""
         if self.browser:
             cef.WindowUtils().OnSize(self.handleId(), 0, 0, 0)
             self.browser.NotifyMoveOrResizeStarted()
@@ -209,16 +210,6 @@ class CefView(QWidget):
     def doReadingFinished(self):
         """全书完"""
         gSignals.reader_reading_finished.emit()
-
-    def doExport(self):
-        """导出笔记"""
-        if self.isReading() and self.handler.is_ready:
-            self.executeFunction(CefModel.JsMethod.ExportNotes)
-
-    def doTheme(self):
-        """切换主题"""
-        if self.isReading() and self.handler.is_ready:
-            self.executeFunction(CefModel.JsMethod.ChangeTheme)
 
     def doAuto(self):
         """切换自动阅读"""

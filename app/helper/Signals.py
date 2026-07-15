@@ -27,6 +27,11 @@ class Signals(QObject):
     reader_refresh_speed = Signal()
     reader_reading_finished = Signal()
 
+    # 定时阅读
+    timing_tasks_changed = Signal()
+    timing_countdown_started = Signal(int)
+    timing_countdown_stopped = Signal()
+
     # API
     finished_api_done = Signal(bool)
 

@@ -19,62 +19,34 @@ class UserKey:
     class General:
         Lang = 'general.i18n_lang'
         WinRect = 'general.win_rect'
-        Exception = 'general.exception_panel'
 
     class Reader:
         Scrollable = 'reader.scrollable'
-        Pinned = 'reader.pinned'
         Speed = 'reader.speed'
-        Step = 'reader.step'
         LatestUrl = 'reader.latest_url'
-
-    class Help:
-        WinRect = 'help.win_rect'
-
-    class About:
-        WinRect = 'about.win_rect'
-
-    class Profile:
-        WinRect = 'profile.win_rect'
-        NoticeUrl = 'profile.notice_url'
-
-    class Sponsor:
-        WinRect = 'sponsor.win_rect'
-
-    class Exception:
-        WinRect = 'exception.win_rect'
-
-    class ReadingFinished:
-        WinRect = 'reading_finished.win_rect'
 
     class Timing:
         WinRect = 'timing.win_rect'
-        EveryDay = 'timing.every_day'
-        StartTime = 'timing.start_time'
-        StopTime = 'timing.stop_time'
+        Enabled = 'timing.enabled'
+        Segments = 'timing.segments'
+        CountdownMinutes = 'timing.countdown_minutes'
+        LegacyEveryDay = 'timing.every_day'
+        LegacyStartTime = 'timing.start_time'
+        LegacyStopTime = 'timing.stop_time'
 
 
 
 # 默认用户存储数据
 default_user_data = {
     UserKey.Reader.Speed: 1,
-    UserKey.Reader.Step: 1,
     UserKey.Reader.Scrollable: False,
-    UserKey.Reader.Pinned: True,
     UserKey.Reader.LatestUrl: 'https://weread.qq.com/',
     UserKey.General.Lang: 'CN',
-    UserKey.General.WinRect: [640, 480, 640, 480],
-    UserKey.Profile.WinRect: [640, 480, 640, 480],
-    UserKey.About.WinRect: [640, 480, 640, 480],
-    UserKey.Help.WinRect: [640, 480, 640, 480],
-    UserKey.Exception.WinRect: [640, 480, 640, 480],
-    UserKey.Sponsor.WinRect: [640, 480, 640, 480],
-    UserKey.ReadingFinished.WinRect: [640, 480, 640, 480],
-    UserKey.Profile.NoticeUrl: '',
-    UserKey.Timing.WinRect: [640,480,640,480],    
-    UserKey.Timing.EveryDay : False,
-    UserKey.Timing.StartTime: 0,
-    UserKey.Timing.StopTime: 0
+    UserKey.General.WinRect: [120, 80, 1120, 720],
+    UserKey.Timing.WinRect: [300, 180, 640, 520],
+    UserKey.Timing.Enabled: False,
+    UserKey.Timing.Segments: [],
+    UserKey.Timing.CountdownMinutes: 30
 }
 
 
@@ -113,6 +85,18 @@ class Preferences:
         for k, v in default_user_data.items():
             if self._data.get(k) is None:
                 self._data.setdefault(k, v)
+
+        if not self._data.get(UserKey.Timing.Segments):
+            legacy_enabled = self._data.get(UserKey.Timing.LegacyEveryDay)
+            legacy_start = self._data.get(UserKey.Timing.LegacyStartTime)
+            legacy_stop = self._data.get(UserKey.Timing.LegacyStopTime)
+            if legacy_enabled and legacy_start is not None and legacy_stop is not None and legacy_start != legacy_stop:
+                self._data[UserKey.Timing.Enabled] = True
+                self._data[UserKey.Timing.Segments] = [{
+                    'start': int(legacy_start),
+                    'stop': int(legacy_stop),
+                    'enabled': True,
+                }]
 
     def save(self):
         """保存数据"""

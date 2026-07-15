@@ -37,52 +37,31 @@ class CefModel:
 
         # ALT + Q
         Quit = 81
-        # ESCAPE
-        Escape = 27
-        # F1
-        Help = 112
-        # F2
-        About = 113
-        # F3
-        Sponsor = 114
         # F4
         Home = 115
         # F5
         Reload = 116
-        # F6
-        Pinned = 117
-        # F8
-        Export = 119
-        # F9
-        Theme = 120
         # F10
         Auto = 121
-        # F11
-        Fullscreen = 122
         # F12
-        Options = 123
+        Timing = 123
         # =
         SpeedUp = 187
         # -
         SpeedDown = 189
 
         values = (
-            Escape, Help, About, Home, Sponsor,
-            Reload, Export, Theme, Auto, Fullscreen,
-            Pinned, Options, SpeedUp, SpeedDown,
+            Home, Reload, Auto, Timing, SpeedUp, SpeedDown,
         )
 
     class PyMethod:
         """Js to Py Binding"""
         UpdateState = 'updateState'
         SendAction = 'sendAction'
-        SavedNotes = 'savedNotes'
 
     class JsMethod:
         """Py to Js Binding"""
         NextChapter = 'nextChapter'
-        ExportNotes = 'exportNotes'
-        ChangeTheme = 'changeTheme'
         DoScroll = 'doScroll'
         Alert = 'alert'
 

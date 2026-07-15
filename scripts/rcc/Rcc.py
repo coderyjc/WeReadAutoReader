@@ -12,7 +12,7 @@
 """
 
 from os import listdir, sep, walk
-from os.path import basename, dirname, isdir, isfile, join, relpath, splitext
+from os.path import abspath, basename, dirname, isdir, isfile, join, relpath, splitext
 from subprocess import Popen
 
 
@@ -26,7 +26,7 @@ class Config:
     """
 
     # 当前目录
-    PROGRAM_AT = dirname(__file__)
+    PROGRAM_AT = dirname(abspath(__file__))
 
     # 资源目录
     RESOURCES_AT = join(PROGRAM_AT, '..', '..', 'resources')
@@ -126,7 +126,9 @@ if __name__ == '__main__':
     qrc.close()
 
     # qrc 转 py
-    with open(Config.QRC_PY_AT, 'w', encoding=Config.ENCODING):
-        cmd = 'pyside6-rcc %s -o %s' % (Config.QRC_RAW_AT, Config.QRC_PY_AT)
-        Popen(cmd, cwd=Config.PROGRAM_AT)
-        print('Done!')
+    cmd = ['pyside6-rcc', Config.QRC_RAW_AT, '-o', Config.QRC_PY_AT]
+    proc = Popen(cmd, cwd=Config.PROGRAM_AT)
+    proc.communicate()
+    if proc.returncode != 0:
+        raise SystemExit('pyside6-rcc failed, code=%s' % proc.returncode)
+    print('Done!')
