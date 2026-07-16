@@ -7,7 +7,7 @@ from conf.Lang import LanguageKeys
 from conf.ResMap import ResMap
 from helper.Cmm import Cmm
 from helper.I18n import I18n
-from helper.Preferences import UserKey, gPreferences
+from helper.Preferences import UserKey, gPreferences, normalize_reader_speed
 from helper.Signals import gSignals
 from ui.model.CefModel import CefModel
 
@@ -242,4 +242,4 @@ class CefView(QWidget):
     @staticmethod
     def speed():
         """当前阅读速度"""
-        return gPreferences.get(UserKey.Reader.Speed)
+        return normalize_reader_speed(gPreferences.get(UserKey.Reader.Speed))

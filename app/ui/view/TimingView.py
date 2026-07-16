@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt, QTime
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -32,37 +33,53 @@ DAY_MS = 24 * 60 * 60 * 1000
 
 TIMING_STYLE = """
 QDialog {
-    background: #f5f5f7;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #fff8eb, stop:0.52 #e7f4ff, stop:1 #fff0d8);
 }
 QLabel#Title {
-    color: #1d1d1f;
-    font-size: 18px;
-    font-weight: 600;
+    color: #16202a;
+    font-family: "Microsoft YaHei UI";
+    font-size: 22px;
+    font-weight: 700;
+}
+QLabel#Eyebrow {
+    color: #1f75b8;
+    font-family: "Consolas", "Microsoft YaHei UI";
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0px;
 }
 QLabel#SectionTitle {
-    color: #1d1d1f;
+    color: #16202a;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 700;
 }
 QLabel#FieldLabel,
 QLabel#MetaText {
-    color: #6e6e73;
+    color: #637384;
     font-size: 12px;
+}
+QFrame#TaskPanel,
+QFrame#TimerPanel {
+    background: rgba(255, 255, 255, 188);
+    border: 1px solid #d7d0c2;
+    border-radius: 10px;
 }
 QListWidget,
 QTimeEdit,
 QSpinBox {
     min-height: 30px;
-    padding: 3px 8px;
+    padding: 4px 9px;
     border-radius: 8px;
-    border: 1px solid #d2d2d7;
-    background: #ffffff;
-    color: #1d1d1f;
-    selection-background-color: #d9ecff;
-    selection-color: #1d1d1f;
+    border: 1px solid #cfd8de;
+    background: rgba(255, 255, 255, 210);
+    color: #16202a;
+    selection-background-color: #1f75d6;
+    selection-color: #ffffff;
 }
 QListWidget {
     padding: 6px;
+    outline: none;
 }
 QListWidget::item {
     min-height: 30px;
@@ -70,35 +87,54 @@ QListWidget::item {
     border-radius: 6px;
 }
 QListWidget::item:selected {
-    background: #d9ecff;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1f75d6, stop:1 #13a887);
+    color: #ffffff;
 }
 QCheckBox {
-    color: #1d1d1f;
+    color: #1c2a34;
     font-size: 13px;
-}
-QPushButton {
-    min-height: 30px;
-    padding: 5px 14px;
-    border-radius: 8px;
-    border: 1px solid #d2d2d7;
-    background: #ffffff;
-    color: #1d1d1f;
-}
-QPushButton:hover {
-    background: #f0f0f3;
-}
-QPushButton:disabled {
-    color: #a1a1a6;
-    background: #f5f5f7;
-}
-QPushButton#PrimaryButton {
-    border-color: #0071e3;
-    background: #0071e3;
-    color: #ffffff;
     font-weight: 600;
 }
+QPushButton {
+    min-height: 32px;
+    padding: 5px 15px;
+    border-radius: 8px;
+    border: 1px solid #cfd8de;
+    background: rgba(255, 255, 255, 196);
+    color: #16202a;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background: #ffffff;
+    border-color: #7dbbe7;
+}
+QPushButton:disabled {
+    color: #a6b0ba;
+    background: rgba(238, 244, 249, 185);
+}
+QPushButton#PrimaryButton {
+    border-color: #1f75d6;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1f75d6, stop:1 #13a887);
+    color: #ffffff;
+    font-weight: 700;
+}
 QPushButton#PrimaryButton:hover {
-    background: #147ce5;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #2f83e2, stop:1 #21b896);
+}
+QPushButton#DangerButton {
+    color: #b64a2f;
+}
+QPushButton#QuietButton {
+    background: transparent;
+    border-color: transparent;
+    color: #526272;
+}
+QPushButton#QuietButton:hover {
+    background: rgba(255, 255, 255, 160);
+    border-color: rgba(255, 255, 255, 160);
 }
 """
 
@@ -144,8 +180,15 @@ class _View(ViewDelegate):
     def __init__(self, win, code, key):
         super(_View, self).__init__(win, code, key)
 
+        self.ui_eyebrow = QLabel("SCHEDULE BOARD")
+        self.ui_eyebrow.setObjectName("Eyebrow")
         self.ui_title = QLabel("定时自动阅读")
         self.ui_title.setObjectName("Title")
+        self.ui_title_stack = QVBoxLayout()
+        self.ui_title_stack.setContentsMargins(0, 0, 0, 0)
+        self.ui_title_stack.setSpacing(3)
+        self.ui_title_stack.addWidget(self.ui_eyebrow)
+        self.ui_title_stack.addWidget(self.ui_title)
 
         self.ui_check_enabled = QCheckBox("启用每日任务")
 
@@ -169,6 +212,7 @@ class _View(ViewDelegate):
         self.ui_btn_add.setObjectName("PrimaryButton")
         self.ui_btn_update = QPushButton("更新")
         self.ui_btn_remove = QPushButton("删除")
+        self.ui_btn_remove.setObjectName("DangerButton")
 
         self.ui_timer_title = QLabel("计时器")
         self.ui_timer_title.setObjectName("SectionTitle")
@@ -180,15 +224,23 @@ class _View(ViewDelegate):
         self.ui_btn_timer_start = QPushButton("开始计时")
         self.ui_btn_timer_start.setObjectName("PrimaryButton")
         self.ui_btn_timer_stop = QPushButton("取消计时")
+        self.ui_btn_timer_stop.setObjectName("QuietButton")
 
         self.ui_btn_close = QPushButton("关闭")
+        self.ui_btn_close.setObjectName("QuietButton")
 
         self.ui_header = QHBoxLayout()
         self.ui_header.setContentsMargins(0, 0, 0, 0)
         self.ui_header.setSpacing(12)
-        self.ui_header.addWidget(self.ui_title)
+        self.ui_header.addLayout(self.ui_title_stack, 1)
         self.ui_header.addStretch(1)
         self.ui_header.addWidget(self.ui_check_enabled)
+
+        self.ui_task_panel = QFrame()
+        self.ui_task_panel.setObjectName("TaskPanel")
+        self.ui_task_panel_layout = QVBoxLayout(self.ui_task_panel)
+        self.ui_task_panel_layout.setContentsMargins(14, 12, 14, 14)
+        self.ui_task_panel_layout.setSpacing(10)
 
         self.ui_editor = QHBoxLayout()
         self.ui_editor.setContentsMargins(0, 0, 0, 0)
@@ -208,6 +260,17 @@ class _View(ViewDelegate):
         self.ui_task_buttons.addWidget(self.ui_btn_remove)
         self.ui_task_buttons.addStretch(1)
 
+        self.ui_task_panel_layout.addWidget(self.ui_task_title)
+        self.ui_task_panel_layout.addWidget(self.ui_task_list, 1)
+        self.ui_task_panel_layout.addLayout(self.ui_editor)
+        self.ui_task_panel_layout.addLayout(self.ui_task_buttons)
+
+        self.ui_timer_panel = QFrame()
+        self.ui_timer_panel.setObjectName("TimerPanel")
+        self.ui_timer_panel_layout = QVBoxLayout(self.ui_timer_panel)
+        self.ui_timer_panel_layout.setContentsMargins(14, 12, 14, 14)
+        self.ui_timer_panel_layout.setSpacing(10)
+
         self.ui_timer_row = QHBoxLayout()
         self.ui_timer_row.setContentsMargins(0, 0, 0, 0)
         self.ui_timer_row.setSpacing(8)
@@ -216,6 +279,8 @@ class _View(ViewDelegate):
         self.ui_timer_row.addWidget(self.ui_btn_timer_stop)
         self.ui_timer_row.addWidget(self.ui_timer_status)
         self.ui_timer_row.addStretch(1)
+        self.ui_timer_panel_layout.addWidget(self.ui_timer_title)
+        self.ui_timer_panel_layout.addLayout(self.ui_timer_row)
 
         self.ui_footer = QHBoxLayout()
         self.ui_footer.setContentsMargins(0, 0, 0, 0)
@@ -226,13 +291,8 @@ class _View(ViewDelegate):
         self.ui_layout.setContentsMargins(18, 16, 18, 16)
         self.ui_layout.setSpacing(12)
         self.ui_layout.addLayout(self.ui_header)
-        self.ui_layout.addWidget(self.ui_task_title)
-        self.ui_layout.addWidget(self.ui_task_list, 1)
-        self.ui_layout.addLayout(self.ui_editor)
-        self.ui_layout.addLayout(self.ui_task_buttons)
-        self.ui_layout.addSpacing(6)
-        self.ui_layout.addWidget(self.ui_timer_title)
-        self.ui_layout.addLayout(self.ui_timer_row)
+        self.ui_layout.addWidget(self.ui_task_panel, 1)
+        self.ui_layout.addWidget(self.ui_timer_panel)
         self.ui_layout.addLayout(self.ui_footer)
         self.view.setLayout(self.ui_layout)
 

@@ -30,7 +30,7 @@ from conf.Views import Views
 from helper.Cmm import Cmm
 from helper.GUI import GUI
 from helper.I18n import I18n
-from helper.Preferences import UserKey, gPreferences
+from helper.Preferences import READER_SPEED_MAX, READER_SPEED_MIN, UserKey, gPreferences, normalize_reader_speed
 from helper.Signals import gSignals
 from ui.model.CefModel import CefModel
 from ui.view.CefView import CefView
@@ -41,101 +41,138 @@ from ui.view.ViewDelegate import ViewDelegate
 DAY_MS = 24 * 60 * 60 * 1000
 
 
-APPLE_STYLE = """
+DAYLIGHT_STYLE = """
 QMainWindow {
-    background: #f5f5f7;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #fff8eb, stop:0.52 #e7f4ff, stop:1 #fff0d8);
 }
 QWidget#RootSurface {
-    background: #f5f5f7;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 #fff8eb, stop:0.52 #e7f4ff, stop:1 #fff0d8);
+}
+QWidget#BrowserSurface {
+    background: #f2f7fb;
 }
 QFrame#ControlPanel {
-    background: #fbfbfd;
-    border-bottom: 1px solid #d8d8dc;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #fffaf0, stop:0.48 #eef8ff, stop:1 #fff4df);
+    border-bottom: 1px solid #d7d0c2;
 }
 QFrame#StatusPill {
-    background: #f0f0f3;
-    border: 1px solid #dedee3;
-    border-radius: 14px;
+    background: rgba(255, 255, 255, 178);
+    border: 1px solid #d8d4ca;
+    border-radius: 15px;
 }
 QFrame#StatusPill[active="true"] {
-    background: #e8f7ee;
-    border-color: #a8dfba;
+    background: #e4f7ef;
+    border-color: #7fd6b1;
+}
+QLabel#Eyebrow {
+    color: #1f75b8;
+    font-family: "Consolas", "Microsoft YaHei UI";
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0px;
 }
 QLabel#AppTitle {
-    color: #1d1d1f;
-    font-size: 18px;
-    font-weight: 600;
+    color: #16202a;
+    font-family: "Microsoft YaHei UI";
+    font-size: 22px;
+    font-weight: 700;
 }
 QLabel#AppSubtitle,
 QLabel#Caption,
 QLabel#MetaText {
-    color: #6e6e73;
+    color: #637384;
     font-size: 12px;
 }
 QLabel#StatusText {
-    color: #1d1d1f;
+    color: #1c2a34;
     font-size: 13px;
-    font-weight: 500;
-}
-QPushButton {
-    min-height: 30px;
-    padding: 5px 13px;
-    border-radius: 8px;
-    border: 1px solid #d2d2d7;
-    background: #ffffff;
-    color: #1d1d1f;
-    font-size: 13px;
-}
-QPushButton:hover {
-    background: #f6f6f8;
-}
-QPushButton:pressed {
-    background: #ededf0;
-}
-QPushButton#PrimaryButton {
-    min-height: 34px;
-    padding: 6px 18px;
-    border: 1px solid #0071e3;
-    background: #0071e3;
-    color: #ffffff;
     font-weight: 600;
 }
+QLabel#SpeedValue {
+    color: #16202a;
+    font-family: "Consolas", "Microsoft YaHei UI";
+    font-size: 13px;
+    font-weight: 700;
+}
+QPushButton {
+    min-height: 34px;
+    padding: 5px 15px;
+    border-radius: 8px;
+    border: 1px solid #cfd8de;
+    background: rgba(255, 255, 255, 196);
+    color: #16202a;
+    font-size: 13px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background: #ffffff;
+    border-color: #7dbbe7;
+}
+QPushButton:pressed {
+    background: #e8f2fb;
+}
+QPushButton#PrimaryButton {
+    min-height: 42px;
+    padding: 7px 22px;
+    border: 1px solid #1f75d6;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1f75d6, stop:1 #13a887);
+    color: #ffffff;
+    font-weight: 700;
+}
 QPushButton#PrimaryButton:hover {
-    background: #147ce5;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #2f83e2, stop:1 #21b896);
+    border-color: #2f83e2;
 }
 QPushButton#PrimaryButton:checked {
-    border-color: #d84a3a;
-    background: #d84a3a;
+    border-color: #c75a32;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #d55d34, stop:1 #f0a13a);
+    color: #ffffff;
+}
+QPushButton#SecondaryButton {
+    background: transparent;
+    border-color: #cfd8de;
+    color: #1c2a34;
+}
+QPushButton#SecondaryButton:hover {
+    background: rgba(255, 255, 255, 190);
+    border-color: #7dbbe7;
 }
 QPushButton#QuietButton {
     background: transparent;
     border-color: transparent;
-    color: #424245;
+    color: #526272;
 }
 QPushButton#QuietButton:hover {
-    background: #ededf0;
-    border-color: #ededf0;
+    background: rgba(255, 255, 255, 160);
+    border-color: rgba(255, 255, 255, 160);
 }
 QSlider::groove:horizontal {
-    height: 4px;
-    border-radius: 2px;
-    background: #d2d2d7;
+    height: 6px;
+    border-radius: 3px;
+    background: #d5e3ea;
 }
 QSlider::sub-page:horizontal {
-    height: 4px;
-    border-radius: 2px;
-    background: #0071e3;
+    height: 6px;
+    border-radius: 3px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+        stop:0 #1f75d6, stop:1 #13a887);
 }
 QSlider::handle:horizontal {
-    width: 18px;
-    height: 18px;
-    margin: -7px 0;
-    border-radius: 9px;
-    border: 1px solid #c7c7cc;
-    background: #ffffff;
+    width: 20px;
+    height: 20px;
+    margin: -8px 0;
+    border-radius: 10px;
+    border: 2px solid #ffffff;
+    background: #1f75d6;
 }
 QSlider::handle:horizontal:hover {
-    border-color: #0071e3;
+    background: #13a887;
 }
 """
 
@@ -156,17 +193,20 @@ class _View(ViewDelegate):
         self.ui_panel = QFrame(self.ui_root)
         self.ui_panel.setObjectName("ControlPanel")
         self.ui_panel_layout = QVBoxLayout(self.ui_panel)
-        self.ui_panel_layout.setContentsMargins(18, 14, 18, 14)
-        self.ui_panel_layout.setSpacing(12)
+        self.ui_panel_layout.setContentsMargins(24, 18, 24, 18)
+        self.ui_panel_layout.setSpacing(14)
 
+        self.ui_eyebrow = QLabel("LOCAL READER AUTOMATION")
+        self.ui_eyebrow.setObjectName("Eyebrow")
         self.ui_title = QLabel("微读自动阅读")
         self.ui_title.setObjectName("AppTitle")
-        self.ui_subtitle = QLabel("只保留自动阅读控制，网页区域用于登录和打开书籍")
+        self.ui_subtitle = QLabel("Reader Automation Console")
         self.ui_subtitle.setObjectName("AppSubtitle")
 
         self.ui_title_box = QVBoxLayout()
         self.ui_title_box.setContentsMargins(0, 0, 0, 0)
-        self.ui_title_box.setSpacing(2)
+        self.ui_title_box.setSpacing(3)
+        self.ui_title_box.addWidget(self.ui_eyebrow)
         self.ui_title_box.addWidget(self.ui_title)
         self.ui_title_box.addWidget(self.ui_subtitle)
 
@@ -174,8 +214,8 @@ class _View(ViewDelegate):
         self.ui_status_pill.setObjectName("StatusPill")
         self.ui_status_pill.setProperty("active", False)
         self.ui_status_layout = QHBoxLayout(self.ui_status_pill)
-        self.ui_status_layout.setContentsMargins(10, 4, 10, 4)
-        self.ui_status_layout.setSpacing(6)
+        self.ui_status_layout.setContentsMargins(13, 6, 13, 6)
+        self.ui_status_layout.setSpacing(8)
         self.ui_status_dot = QLabel("●")
         self.ui_status_dot.setObjectName("MetaText")
         self.ui_status_text = QLabel("待机")
@@ -189,10 +229,13 @@ class _View(ViewDelegate):
         self.ui_act_auto.setToolTip("切换自动阅读    F10")
 
         self.ui_act_home = QPushButton("首页")
+        self.ui_act_home.setObjectName("SecondaryButton")
         self.ui_act_home.setToolTip("回到微信读书首页    F4")
         self.ui_act_refresh = QPushButton("刷新")
+        self.ui_act_refresh.setObjectName("SecondaryButton")
         self.ui_act_refresh.setToolTip("刷新当前页面    F5")
         self.ui_act_timing = QPushButton("定时")
+        self.ui_act_timing.setObjectName("SecondaryButton")
         self.ui_act_timing.setToolTip("设置每日任务和计时器    F12")
         self.ui_act_quit = QPushButton("退出")
         self.ui_act_quit.setObjectName("QuietButton")
@@ -201,14 +244,15 @@ class _View(ViewDelegate):
         self.ui_speed_caption = QLabel("速度")
         self.ui_speed_caption.setObjectName("Caption")
         self.ui_speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.ui_speed_slider.setMinimum(1)
-        self.ui_speed_slider.setMaximum(100)
+        self.ui_speed_slider.setMinimum(READER_SPEED_MIN)
+        self.ui_speed_slider.setMaximum(READER_SPEED_MAX)
         self.ui_speed_slider.setSingleStep(1)
-        self.ui_speed_slider.setPageStep(5)
-        self.ui_speed_slider.setMinimumWidth(260)
+        self.ui_speed_slider.setPageStep(1)
+        self.ui_speed_slider.setMinimumWidth(160)
+        self.ui_speed_slider.setMaximumWidth(220)
         self.ui_speed_value = QLabel("")
-        self.ui_speed_value.setObjectName("StatusText")
-        self.ui_speed_value.setMinimumWidth(30)
+        self.ui_speed_value.setObjectName("SpeedValue")
+        self.ui_speed_value.setMinimumWidth(24)
         self.ui_speed_value.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
         self.ui_header_row = QHBoxLayout()
@@ -226,19 +270,15 @@ class _View(ViewDelegate):
         self.ui_primary_actions.addWidget(self.ui_act_timing)
         self.ui_primary_actions.addWidget(self.ui_act_quit)
         self.ui_primary_actions.addStretch(1)
-
-        self.ui_speed_row = QHBoxLayout()
-        self.ui_speed_row.setContentsMargins(0, 0, 0, 0)
-        self.ui_speed_row.setSpacing(10)
-        self.ui_speed_row.addWidget(self.ui_speed_caption)
-        self.ui_speed_row.addWidget(self.ui_speed_slider, 1)
-        self.ui_speed_row.addWidget(self.ui_speed_value)
+        self.ui_primary_actions.addWidget(self.ui_speed_caption)
+        self.ui_primary_actions.addWidget(self.ui_speed_slider)
+        self.ui_primary_actions.addWidget(self.ui_speed_value)
 
         self.ui_panel_layout.addLayout(self.ui_header_row)
         self.ui_panel_layout.addLayout(self.ui_primary_actions)
-        self.ui_panel_layout.addLayout(self.ui_speed_row)
 
         self.ui_cef = CefView(self.ui_root)
+        self.ui_cef.setObjectName("BrowserSurface")
 
         self.ui_layout.addWidget(self.ui_panel)
         self.ui_layout.addWidget(self.ui_cef, 1)
@@ -281,11 +321,11 @@ class WindowView(QMainWindow):
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setWindowTitle("微读自动阅读")
         self.setWindowIcon(GUI.icon(ResMap.icon_app))
-        self.setStyleSheet(APPLE_STYLE)
+        self.setStyleSheet(DAYLIGHT_STYLE)
         self.setCentralWidget(self.view.ui_root)
         self.view.ui_cef.embedBrowser()
         self.view.ui_act_auto.setChecked(gPreferences.get(UserKey.Reader.Scrollable))
-        self.view.ui_speed_slider.setValue(gPreferences.get(UserKey.Reader.Speed))
+        self.view.ui_speed_slider.setValue(self.normalizedSpeed())
         self.refreshSpeed()
         self.refreshAutoState()
         if self.width() < 900 or self.height() < 600:
@@ -326,7 +366,7 @@ class WindowView(QMainWindow):
         self.view.ui_act_auto.setText("暂停自动阅读" if checked else "开始自动阅读")
         self.view.ui_status_pill.setProperty("active", checked)
         self.view.ui_status_dot.setText("●")
-        self.view.ui_status_dot.setStyleSheet("color: #34c759;" if checked else "color: #8e8e93;")
+        self.view.ui_status_dot.setStyleSheet("color: #18a886;" if checked else "color: #8d9baa;")
         self.view.ui_status_pill.style().unpolish(self.view.ui_status_pill)
         self.view.ui_status_pill.style().polish(self.view.ui_status_pill)
         self.refreshStatusTip("")
@@ -364,12 +404,20 @@ class WindowView(QMainWindow):
 
     def refreshSpeed(self):
         """刷新阅读速度"""
-        speed = gPreferences.get(UserKey.Reader.Speed)
+        speed = self.normalizedSpeed()
         if self.view.ui_speed_slider.value() != speed:
             self.view.ui_speed_slider.blockSignals(True)
             self.view.ui_speed_slider.setValue(speed)
             self.view.ui_speed_slider.blockSignals(False)
         self.view.ui_speed_value.setText(str(speed))
+
+    @staticmethod
+    def normalizedSpeed() -> int:
+        """读取并收敛到 1-10 的阅读速度。"""
+        speed = normalize_reader_speed(gPreferences.get(UserKey.Reader.Speed))
+        if speed != gPreferences.get(UserKey.Reader.Speed):
+            gPreferences.set(UserKey.Reader.Speed, speed)
+        return speed
 
     def setupCefTimer(self):
         """启动 CEF 更新定时器"""
@@ -574,15 +622,15 @@ class WindowView(QMainWindow):
 
     def onToolbarSpeedUp(self):
         """提高速度"""
-        self.view.ui_speed_slider.setValue(min(100, self.view.ui_speed_slider.value() + 1))
+        self.view.ui_speed_slider.setValue(min(READER_SPEED_MAX, self.view.ui_speed_slider.value() + 1))
 
     def onToolbarSpeedDown(self):
         """降低速度"""
-        self.view.ui_speed_slider.setValue(max(1, self.view.ui_speed_slider.value() - 1))
+        self.view.ui_speed_slider.setValue(max(READER_SPEED_MIN, self.view.ui_speed_slider.value() - 1))
 
     def onSpeedChanged(self, value: int):
         """速度变化事件"""
-        gPreferences.set(UserKey.Reader.Speed, value)
+        gPreferences.set(UserKey.Reader.Speed, normalize_reader_speed(value))
         self.view.ui_cef.doSpeed()
         self.refreshSpeed()
 

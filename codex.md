@@ -88,6 +88,18 @@ conda run -n wxreader-py37 python .\scripts\rcc\Rcc.py
 ```
 
 - `scripts/rcc/Rcc.py` 已修过一个坑：旧版使用相对 `__file__` 且不等待 `pyside6-rcc`，可能生成空的 `app/conf/Resources.py`。如果资源导入报 `qInitResources` 缺失，优先检查资源生成是否成功。
+- 打包命令优先使用 Conda 环境：
+
+```powershell
+cd .\scripts\package
+conda run -n wxreader-py37 python .\bundle.py -V 2.0.2.1 -C
+```
+
+- `bundle.py` 会先生成 `scripts/package/dist/WxReader/WxReader.exe`，再生成便携 zip。CEF/PySide6 是 onedir 程序，不能只复制单个 `WxReader.exe` 到别处运行，必须带上同目录依赖，或者直接使用 `WxReader_v<version>_Portable.zip`。
+- 当前机器没有可用的 `makensis` 命令；`bundle.py` 会打印 `'makensis' is not recognized...`，但脚本没有检查返回码，会误报安装包已生成。实际是否有安装包要检查 `scripts/package/WxReader_v<version>_Installer.exe` 是否存在。
+- 当前前端视觉方向是渐变日间主题：浅奶油、浅蓝和暖橙渐变，主按钮使用蓝绿渐变，定时窗口分为任务面板和计时器面板。相关样式分布在 `app/ui/view/WindowView.py`、`app/ui/view/TimingView.py` 和 `resources/theme/default.qss`。
+- 阅读速度范围已经收窄到 1-10。旧配置里大于 10 的速度值会被夹到 10；不要再恢复 1-100 的滑块。
+- 如果修改 `resources/theme/default.qss`，必须重新运行 `conda run -n wxreader-py37 python .\scripts\rcc\Rcc.py`，否则应用启动读取的 Qt 资源仍可能是旧 QSS。
 
 ## 后续维护建议
 

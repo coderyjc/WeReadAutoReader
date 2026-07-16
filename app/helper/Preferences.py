@@ -13,6 +13,18 @@ from os.path import exists
 from helper.Cmm import Cmm
 
 
+READER_SPEED_MIN = 1
+READER_SPEED_MAX = 10
+
+
+def normalize_reader_speed(value):
+    try:
+        speed = int(value)
+    except (TypeError, ValueError):
+        speed = READER_SPEED_MIN
+    return max(READER_SPEED_MIN, min(READER_SPEED_MAX, speed))
+
+
 class UserKey:
     """用户配置存储项"""
 
@@ -97,6 +109,8 @@ class Preferences:
                     'stop': int(legacy_stop),
                     'enabled': True,
                 }]
+
+        self._data[UserKey.Reader.Speed] = normalize_reader_speed(self._data.get(UserKey.Reader.Speed))
 
     def save(self):
         """保存数据"""
