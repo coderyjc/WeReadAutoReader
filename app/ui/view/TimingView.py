@@ -2,14 +2,13 @@
 
 """
 @File    : TimingView.py
-@Desc    : 定时自动阅读窗口
+@Desc    : 嵌入式定时自动阅读面板
 """
 from typing import Any, Dict, List
 
-from PySide6.QtCore import Qt, QTime
+from PySide6.QtCore import Qt, QTime, Signal
 from PySide6.QtWidgets import (
-    QCheckBox,
-    QDialog,
+    QButtonGroup,
     QFrame,
     QHBoxLayout,
     QLabel,
@@ -22,30 +21,29 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from conf.Views import Views
 from helper.Preferences import UserKey, gPreferences
 from helper.Signals import gSignals
-from ui.view.ViewDelegate import ViewDelegate
 
 
 DAY_MS = 24 * 60 * 60 * 1000
 
 
 TIMING_STYLE = """
-QDialog {
-    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-        stop:0 #fff8eb, stop:0.52 #e7f4ff, stop:1 #fff0d8);
+QFrame#InlineTimingPanel {
+    background: rgba(255, 255, 255, 118);
+    border: 1px solid rgba(125, 187, 231, 125);
+    border-radius: 12px;
 }
-QLabel#Title {
+QLabel#PanelTitle {
     color: #16202a;
     font-family: "Microsoft YaHei UI";
-    font-size: 22px;
+    font-size: 16px;
     font-weight: 700;
 }
-QLabel#Eyebrow {
+QLabel#PanelEyebrow {
     color: #1f75b8;
     font-family: "Consolas", "Microsoft YaHei UI";
-    font-size: 11px;
+    font-size: 10px;
     font-weight: 700;
     letter-spacing: 0px;
 }
@@ -61,7 +59,7 @@ QLabel#MetaText {
 }
 QFrame#TaskPanel,
 QFrame#TimerPanel {
-    background: rgba(255, 255, 255, 188);
+    background: rgba(255, 255, 255, 172);
     border: 1px solid #d7d0c2;
     border-radius: 10px;
 }
@@ -70,9 +68,10 @@ QTimeEdit,
 QSpinBox {
     min-height: 30px;
     padding: 4px 9px;
+    padding-right: 28px;
     border-radius: 8px;
     border: 1px solid #cfd8de;
-    background: rgba(255, 255, 255, 210);
+    background: rgba(255, 255, 255, 220);
     color: #16202a;
     selection-background-color: #1f75d6;
     selection-color: #ffffff;
@@ -82,7 +81,7 @@ QListWidget {
     outline: none;
 }
 QListWidget::item {
-    min-height: 30px;
+    min-height: 28px;
     padding: 4px 8px;
     border-radius: 6px;
 }
@@ -91,14 +90,51 @@ QListWidget::item:selected {
         stop:0 #1f75d6, stop:1 #13a887);
     color: #ffffff;
 }
-QCheckBox {
-    color: #1c2a34;
-    font-size: 13px;
-    font-weight: 600;
+QTimeEdit::up-button,
+QSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 22px;
+    border-left: 1px solid #cfd8de;
+    border-top-right-radius: 8px;
+    background: rgba(231, 244, 255, 210);
+}
+QTimeEdit::down-button,
+QSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom right;
+    width: 22px;
+    border-left: 1px solid #cfd8de;
+    border-bottom-right-radius: 8px;
+    background: rgba(255, 240, 216, 210);
+}
+QTimeEdit::up-button:hover,
+QSpinBox::up-button:hover,
+QTimeEdit::down-button:hover,
+QSpinBox::down-button:hover {
+    background: #ffffff;
+}
+QTimeEdit::up-arrow,
+QSpinBox::up-arrow {
+    image: none;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-bottom: 5px solid #1f75d6;
+}
+QTimeEdit::down-arrow,
+QSpinBox::down-arrow {
+    image: none;
+    width: 0;
+    height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #13a887;
 }
 QPushButton {
-    min-height: 32px;
-    padding: 5px 15px;
+    min-height: 30px;
+    padding: 5px 13px;
     border-radius: 8px;
     border: 1px solid #cfd8de;
     background: rgba(255, 255, 255, 196);
@@ -135,6 +171,22 @@ QPushButton#QuietButton {
 QPushButton#QuietButton:hover {
     background: rgba(255, 255, 255, 160);
     border-color: rgba(255, 255, 255, 160);
+}
+QPushButton#EnableSegmentButton,
+QPushButton#DisableSegmentButton {
+    min-width: 50px;
+    padding-left: 12px;
+    padding-right: 12px;
+}
+QPushButton#EnableSegmentButton:checked {
+    background: #e4f7ef;
+    border-color: #13a887;
+    color: #0f6f60;
+}
+QPushButton#DisableSegmentButton:checked {
+    background: #fff0d8;
+    border-color: #d98d2f;
+    color: #9a4d17;
 }
 """
 
@@ -174,27 +226,40 @@ def _normalize_segments(raw_segments: Any) -> List[Dict[str, Any]]:
     return sorted(normalized, key=lambda segment: (segment['start'], segment['stop']))
 
 
-class _View(ViewDelegate):
-    """定时窗口 UI"""
+class TimingPanel(QFrame):
+    """主窗口内嵌的定时设置面板。"""
 
-    def __init__(self, win, code, key):
-        super(_View, self).__init__(win, code, key)
+    collapse_requested = Signal()
 
+    def __init__(self, parent=None):
+        super(TimingPanel, self).__init__(parent)
+
+        self.segments = _normalize_segments(gPreferences.get(UserKey.Timing.Segments))
+        self.setObjectName("InlineTimingPanel")
+        self.setStyleSheet(TIMING_STYLE)
+        self.setupUi()
+        self.setupPreferences()
+        self.setupSignals()
+        self.refreshTaskList()
+
+    def setupUi(self):
         self.ui_eyebrow = QLabel("SCHEDULE BOARD")
-        self.ui_eyebrow.setObjectName("Eyebrow")
+        self.ui_eyebrow.setObjectName("PanelEyebrow")
         self.ui_title = QLabel("定时自动阅读")
-        self.ui_title.setObjectName("Title")
+        self.ui_title.setObjectName("PanelTitle")
         self.ui_title_stack = QVBoxLayout()
         self.ui_title_stack.setContentsMargins(0, 0, 0, 0)
-        self.ui_title_stack.setSpacing(3)
+        self.ui_title_stack.setSpacing(2)
         self.ui_title_stack.addWidget(self.ui_eyebrow)
         self.ui_title_stack.addWidget(self.ui_title)
 
-        self.ui_check_enabled = QCheckBox("启用每日任务")
+        self.ui_btn_collapse = QPushButton("收起")
+        self.ui_btn_collapse.setObjectName("QuietButton")
 
         self.ui_task_title = QLabel("每日时间段")
         self.ui_task_title.setObjectName("SectionTitle")
         self.ui_task_list = QListWidget()
+        self.ui_task_list.setMaximumHeight(118)
 
         self.ui_lab_start = QLabel("开始")
         self.ui_lab_start.setObjectName("FieldLabel")
@@ -206,7 +271,19 @@ class _View(ViewDelegate):
         self.ui_time_stop = QTimeEdit()
         self.ui_time_stop.setDisplayFormat("HH:mm")
 
-        self.ui_check_task_enabled = QCheckBox("启用所选")
+        self.ui_lab_state = QLabel("状态")
+        self.ui_lab_state.setObjectName("FieldLabel")
+        self.ui_btn_task_enable = QPushButton("启用")
+        self.ui_btn_task_enable.setObjectName("EnableSegmentButton")
+        self.ui_btn_task_enable.setCheckable(True)
+        self.ui_btn_task_disable = QPushButton("停用")
+        self.ui_btn_task_disable.setObjectName("DisableSegmentButton")
+        self.ui_btn_task_disable.setCheckable(True)
+        self.ui_task_state_group = QButtonGroup(self)
+        self.ui_task_state_group.setExclusive(True)
+        self.ui_task_state_group.addButton(self.ui_btn_task_enable)
+        self.ui_task_state_group.addButton(self.ui_btn_task_disable)
+        self.ui_btn_task_enable.setChecked(True)
 
         self.ui_btn_add = QPushButton("新增")
         self.ui_btn_add.setObjectName("PrimaryButton")
@@ -226,21 +303,17 @@ class _View(ViewDelegate):
         self.ui_btn_timer_stop = QPushButton("取消计时")
         self.ui_btn_timer_stop.setObjectName("QuietButton")
 
-        self.ui_btn_close = QPushButton("关闭")
-        self.ui_btn_close.setObjectName("QuietButton")
-
         self.ui_header = QHBoxLayout()
         self.ui_header.setContentsMargins(0, 0, 0, 0)
         self.ui_header.setSpacing(12)
         self.ui_header.addLayout(self.ui_title_stack, 1)
-        self.ui_header.addStretch(1)
-        self.ui_header.addWidget(self.ui_check_enabled)
+        self.ui_header.addWidget(self.ui_btn_collapse)
 
         self.ui_task_panel = QFrame()
         self.ui_task_panel.setObjectName("TaskPanel")
         self.ui_task_panel_layout = QVBoxLayout(self.ui_task_panel)
-        self.ui_task_panel_layout.setContentsMargins(14, 12, 14, 14)
-        self.ui_task_panel_layout.setSpacing(10)
+        self.ui_task_panel_layout.setContentsMargins(12, 10, 12, 12)
+        self.ui_task_panel_layout.setSpacing(8)
 
         self.ui_editor = QHBoxLayout()
         self.ui_editor.setContentsMargins(0, 0, 0, 0)
@@ -249,7 +322,9 @@ class _View(ViewDelegate):
         self.ui_editor.addWidget(self.ui_time_start)
         self.ui_editor.addWidget(self.ui_lab_stop)
         self.ui_editor.addWidget(self.ui_time_stop)
-        self.ui_editor.addWidget(self.ui_check_task_enabled)
+        self.ui_editor.addWidget(self.ui_lab_state)
+        self.ui_editor.addWidget(self.ui_btn_task_enable)
+        self.ui_editor.addWidget(self.ui_btn_task_disable)
         self.ui_editor.addStretch(1)
 
         self.ui_task_buttons = QHBoxLayout()
@@ -261,15 +336,15 @@ class _View(ViewDelegate):
         self.ui_task_buttons.addStretch(1)
 
         self.ui_task_panel_layout.addWidget(self.ui_task_title)
-        self.ui_task_panel_layout.addWidget(self.ui_task_list, 1)
+        self.ui_task_panel_layout.addWidget(self.ui_task_list)
         self.ui_task_panel_layout.addLayout(self.ui_editor)
         self.ui_task_panel_layout.addLayout(self.ui_task_buttons)
 
         self.ui_timer_panel = QFrame()
         self.ui_timer_panel.setObjectName("TimerPanel")
         self.ui_timer_panel_layout = QVBoxLayout(self.ui_timer_panel)
-        self.ui_timer_panel_layout.setContentsMargins(14, 12, 14, 14)
-        self.ui_timer_panel_layout.setSpacing(10)
+        self.ui_timer_panel_layout.setContentsMargins(12, 10, 12, 12)
+        self.ui_timer_panel_layout.setSpacing(8)
 
         self.ui_timer_row = QHBoxLayout()
         self.ui_timer_row.setContentsMargins(0, 0, 0, 0)
@@ -277,71 +352,53 @@ class _View(ViewDelegate):
         self.ui_timer_row.addWidget(self.ui_timer_minutes)
         self.ui_timer_row.addWidget(self.ui_btn_timer_start)
         self.ui_timer_row.addWidget(self.ui_btn_timer_stop)
-        self.ui_timer_row.addWidget(self.ui_timer_status)
-        self.ui_timer_row.addStretch(1)
+
         self.ui_timer_panel_layout.addWidget(self.ui_timer_title)
         self.ui_timer_panel_layout.addLayout(self.ui_timer_row)
+        self.ui_timer_panel_layout.addWidget(self.ui_timer_status)
+        self.ui_timer_panel_layout.addStretch(1)
 
-        self.ui_footer = QHBoxLayout()
-        self.ui_footer.setContentsMargins(0, 0, 0, 0)
-        self.ui_footer.addStretch(1)
-        self.ui_footer.addWidget(self.ui_btn_close)
+        self.ui_body = QHBoxLayout()
+        self.ui_body.setContentsMargins(0, 0, 0, 0)
+        self.ui_body.setSpacing(12)
+        self.ui_body.addWidget(self.ui_task_panel, 3)
+        self.ui_body.addWidget(self.ui_timer_panel, 2)
 
-        self.ui_layout = QVBoxLayout()
-        self.ui_layout.setContentsMargins(18, 16, 18, 16)
-        self.ui_layout.setSpacing(12)
+        self.ui_layout = QVBoxLayout(self)
+        self.ui_layout.setContentsMargins(14, 12, 14, 14)
+        self.ui_layout.setSpacing(10)
         self.ui_layout.addLayout(self.ui_header)
-        self.ui_layout.addWidget(self.ui_task_panel, 1)
-        self.ui_layout.addWidget(self.ui_timer_panel)
-        self.ui_layout.addLayout(self.ui_footer)
-        self.view.setLayout(self.ui_layout)
-
-
-class TimingView(QDialog):
-    """定时自动阅读设置"""
-
-    def __init__(self):
-        super(TimingView, self).__init__()
-
-        self.segments = _normalize_segments(gPreferences.get(UserKey.Timing.Segments))
-        self.view = _View(self, Views.Timing, UserKey.Timing.WinRect)
-        self.setWindowTitle("定时自动阅读")
-        self.setMinimumSize(640, 520)
-        self.setModal(True)
-        self.setStyleSheet(TIMING_STYLE)
-        self.setupPreferences()
-        self.setupSignals()
-        self.refreshTaskList()
+        self.ui_layout.addLayout(self.ui_body)
 
     def setupSignals(self):
-        self.view.ui_check_enabled.toggled.connect(self.persistSegments)
-        self.view.ui_task_list.currentRowChanged.connect(self.onTaskSelected)
-        self.view.ui_btn_add.clicked.connect(self.onAddClicked)
-        self.view.ui_btn_update.clicked.connect(self.onUpdateClicked)
-        self.view.ui_btn_remove.clicked.connect(self.onRemoveClicked)
-        self.view.ui_btn_timer_start.clicked.connect(self.onTimerStartClicked)
-        self.view.ui_btn_timer_stop.clicked.connect(self.onTimerStopClicked)
-        self.view.ui_btn_close.clicked.connect(self.close)
+        self.ui_task_list.currentRowChanged.connect(self.onTaskSelected)
+        self.ui_btn_task_enable.clicked.connect(self.onTaskStateChanged)
+        self.ui_btn_task_disable.clicked.connect(self.onTaskStateChanged)
+        self.ui_btn_add.clicked.connect(self.onAddClicked)
+        self.ui_btn_update.clicked.connect(self.onUpdateClicked)
+        self.ui_btn_remove.clicked.connect(self.onRemoveClicked)
+        self.ui_btn_timer_start.clicked.connect(self.onTimerStartClicked)
+        self.ui_btn_timer_stop.clicked.connect(self.onTimerStopClicked)
+        self.ui_btn_collapse.clicked.connect(self.collapse_requested.emit)
 
     def setupPreferences(self):
-        self.view.ui_check_enabled.setChecked(gPreferences.get(UserKey.Timing.Enabled))
-        self.view.ui_timer_minutes.setValue(gPreferences.get(UserKey.Timing.CountdownMinutes))
+        self.ui_timer_minutes.setValue(gPreferences.get(UserKey.Timing.CountdownMinutes))
         now = QTime.currentTime().addSecs(60)
         start = QTime(now.hour(), now.minute(), 0)
-        self.view.ui_time_start.setTime(start)
-        self.view.ui_time_stop.setTime(start.addSecs(60 * 30))
-        self.view.ui_check_task_enabled.setChecked(True)
+        self.ui_time_start.setTime(start)
+        self.ui_time_stop.setTime(start.addSecs(60 * 30))
+        self.setTaskStateButtons(True)
 
     def refreshTaskList(self, selected_row: int = -1):
-        self.view.ui_task_list.blockSignals(True)
-        self.view.ui_task_list.clear()
+        self.ui_task_list.blockSignals(True)
+        self.ui_task_list.clear()
         for segment in self.segments:
-            self.view.ui_task_list.addItem(self.makeTaskItem(segment))
-        self.view.ui_task_list.blockSignals(False)
+            self.ui_task_list.addItem(self.makeTaskItem(segment))
+        self.ui_task_list.blockSignals(False)
 
         if self.segments:
             row = selected_row if 0 <= selected_row < len(self.segments) else 0
-            self.view.ui_task_list.setCurrentRow(row)
+            self.ui_task_list.setCurrentRow(row)
         else:
             self.onTaskSelected(-1)
 
@@ -359,31 +416,47 @@ class TimingView(QDialog):
 
     def onTaskSelected(self, row: int):
         has_selection = 0 <= row < len(self.segments)
-        self.view.ui_btn_update.setEnabled(has_selection)
-        self.view.ui_btn_remove.setEnabled(has_selection)
+        self.ui_btn_update.setEnabled(has_selection)
+        self.ui_btn_remove.setEnabled(has_selection)
         if not has_selection:
-            self.view.ui_check_task_enabled.setChecked(True)
+            self.setTaskStateButtons(True)
             return
 
         segment = self.segments[row]
-        self.view.ui_time_start.setTime(_ms_to_time(segment['start']))
-        self.view.ui_time_stop.setTime(_ms_to_time(segment['stop']))
-        self.view.ui_check_task_enabled.setChecked(segment.get('enabled', True))
+        self.ui_time_start.setTime(_ms_to_time(segment['start']))
+        self.ui_time_stop.setTime(_ms_to_time(segment['stop']))
+        self.setTaskStateButtons(segment.get('enabled', True))
+
+    def setTaskStateButtons(self, enabled: bool):
+        self.ui_btn_task_enable.blockSignals(True)
+        self.ui_btn_task_disable.blockSignals(True)
+        self.ui_btn_task_enable.setChecked(enabled)
+        self.ui_btn_task_disable.setChecked(not enabled)
+        self.ui_btn_task_enable.blockSignals(False)
+        self.ui_btn_task_disable.blockSignals(False)
+
+    def onTaskStateChanged(self):
+        row = self.ui_task_list.currentRow()
+        if not 0 <= row < len(self.segments):
+            return
+
+        self.segments[row]['enabled'] = self.ui_btn_task_enable.isChecked()
+        self.persistSegments()
+        self.refreshTaskList(row)
 
     def buildSegmentFromEditor(self) -> Dict[str, Any]:
-        start = _time_to_ms(self.view.ui_time_start.time())
-        stop = _time_to_ms(self.view.ui_time_stop.time())
+        start = _time_to_ms(self.ui_time_start.time())
+        stop = _time_to_ms(self.ui_time_stop.time())
         if start == stop:
             raise ValueError("开始和结束不能相同")
         return {
             'start': start,
             'stop': stop,
-            'enabled': self.view.ui_check_task_enabled.isChecked(),
+            'enabled': self.ui_btn_task_enable.isChecked(),
         }
 
     def persistSegments(self, *_):
         self.segments = _normalize_segments(self.segments)
-        gPreferences.set(UserKey.Timing.Enabled, self.view.ui_check_enabled.isChecked())
         gPreferences.set(UserKey.Timing.Segments, self.segments)
         gSignals.timing_tasks_changed.emit()
 
@@ -394,14 +467,12 @@ class TimingView(QDialog):
             QMessageBox.warning(self, "时间段无效", str(error))
             return
 
-        if len(self.segments) == 1:
-            self.view.ui_check_enabled.setChecked(True)
         self.persistSegments()
         selected = len(_normalize_segments(self.segments)) - 1
         self.refreshTaskList(selected)
 
     def onUpdateClicked(self):
-        row = self.view.ui_task_list.currentRow()
+        row = self.ui_task_list.currentRow()
         if not 0 <= row < len(self.segments):
             return
 
@@ -415,30 +486,23 @@ class TimingView(QDialog):
         self.refreshTaskList(row)
 
     def onRemoveClicked(self):
-        row = self.view.ui_task_list.currentRow()
+        row = self.ui_task_list.currentRow()
         if not 0 <= row < len(self.segments):
             return
 
         self.segments.pop(row)
-        if not self.segments:
-            self.view.ui_check_enabled.setChecked(False)
         self.persistSegments()
         self.refreshTaskList(min(row, len(self.segments) - 1))
 
     def onTimerStartClicked(self):
-        minutes = self.view.ui_timer_minutes.value()
+        minutes = self.ui_timer_minutes.value()
         gPreferences.set(UserKey.Timing.CountdownMinutes, minutes)
-        self.view.ui_timer_status.setText("已启动")
+        self.setCountdownStatus("已启动")
         gSignals.timing_countdown_started.emit(minutes)
 
     def onTimerStopClicked(self):
-        self.view.ui_timer_status.setText("未运行")
+        self.setCountdownStatus("未运行")
         gSignals.timing_countdown_stopped.emit()
 
-    def closeEvent(self, event):
-        self.view.closeEvent(event)
-        super(TimingView, self).closeEvent(event)
-
-    def resizeEvent(self, event):
-        self.view.resizeEvent(event)
-        super(TimingView, self).resizeEvent(event)
+    def setCountdownStatus(self, text: str):
+        self.ui_timer_status.setText(text)

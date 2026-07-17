@@ -39,7 +39,6 @@ class UserKey:
 
     class Timing:
         WinRect = 'timing.win_rect'
-        Enabled = 'timing.enabled'
         Segments = 'timing.segments'
         CountdownMinutes = 'timing.countdown_minutes'
         LegacyEveryDay = 'timing.every_day'
@@ -56,7 +55,6 @@ default_user_data = {
     UserKey.General.Lang: 'CN',
     UserKey.General.WinRect: [120, 80, 1120, 720],
     UserKey.Timing.WinRect: [300, 180, 640, 520],
-    UserKey.Timing.Enabled: False,
     UserKey.Timing.Segments: [],
     UserKey.Timing.CountdownMinutes: 30
 }
@@ -103,7 +101,6 @@ class Preferences:
             legacy_start = self._data.get(UserKey.Timing.LegacyStartTime)
             legacy_stop = self._data.get(UserKey.Timing.LegacyStopTime)
             if legacy_enabled and legacy_start is not None and legacy_stop is not None and legacy_start != legacy_stop:
-                self._data[UserKey.Timing.Enabled] = True
                 self._data[UserKey.Timing.Segments] = [{
                     'start': int(legacy_start),
                     'stop': int(legacy_stop),

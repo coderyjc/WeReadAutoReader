@@ -34,7 +34,7 @@ from helper.Preferences import READER_SPEED_MAX, READER_SPEED_MIN, UserKey, gPre
 from helper.Signals import gSignals
 from ui.model.CefModel import CefModel
 from ui.view.CefView import CefView
-from ui.view.TimingView import TimingView
+from ui.view.TimingView import TimingPanel
 from ui.view.ViewDelegate import ViewDelegate
 
 
@@ -143,6 +143,11 @@ QPushButton#SecondaryButton:hover {
     background: rgba(255, 255, 255, 190);
     border-color: #7dbbe7;
 }
+QPushButton#SecondaryButton:checked {
+    background: #e4f7ef;
+    border-color: #13a887;
+    color: #0f6f60;
+}
 QPushButton#QuietButton {
     background: transparent;
     border-color: transparent;
@@ -236,6 +241,7 @@ class _View(ViewDelegate):
         self.ui_act_refresh.setToolTip("刷新当前页面    F5")
         self.ui_act_timing = QPushButton("定时")
         self.ui_act_timing.setObjectName("SecondaryButton")
+        self.ui_act_timing.setCheckable(True)
         self.ui_act_timing.setToolTip("设置每日任务和计时器    F12")
         self.ui_act_quit = QPushButton("退出")
         self.ui_act_quit.setObjectName("QuietButton")
@@ -276,6 +282,10 @@ class _View(ViewDelegate):
 
         self.ui_panel_layout.addLayout(self.ui_header_row)
         self.ui_panel_layout.addLayout(self.ui_primary_actions)
+
+        self.ui_timing_panel = TimingPanel(self.ui_panel)
+        self.ui_timing_panel.setVisible(False)
+        self.ui_panel_layout.addWidget(self.ui_timing_panel)
 
         self.ui_cef = CefView(self.ui_root)
         self.ui_cef.setObjectName("BrowserSurface")
@@ -343,6 +353,7 @@ class WindowView(QMainWindow):
         self.view.ui_act_timing.clicked.connect(self.onToolbarTiming)
         self.view.ui_act_quit.clicked.connect(self.onToolbarQuit)
         self.view.ui_speed_slider.valueChanged.connect(self.onSpeedChanged)
+        self.view.ui_timing_panel.collapse_requested.connect(lambda: self.setTimingPanelVisible(False))
         gSignals.cef_short_cut.connect(self.onShortcutActivated)
         gSignals.reader_refresh_speed.connect(self.refreshSpeed)
         gSignals.reader_status_tip_updated.connect(self.refreshStatusTip)
@@ -353,12 +364,43 @@ class WindowView(QMainWindow):
 
     def refreshStatusTip(self, tip: str):
         """刷新状态提示"""
+        if self.countdown_deadline_ms is not None:
+            self.refreshCountdownStatus()
+            return
+
         if tip:
             self.view.ui_status_text.setText(tip)
         elif self.view.ui_act_auto.isChecked():
             self.view.ui_status_text.setText(I18n.text(LanguageKeys.tips_auto_read_on))
         else:
             self.view.ui_status_text.setText("待机")
+
+    def countdownRemainingSeconds(self) -> int:
+        """读取计时器剩余秒数。"""
+        if self.countdown_deadline_ms is None:
+            return 0
+
+        remaining_ms = max(0, self.countdown_deadline_ms - QDateTime.currentMSecsSinceEpoch())
+        return int((remaining_ms + 999) // 1000)
+
+    def countdownStatusText(self) -> str:
+        """格式化右上角状态框中的计时器读秒。"""
+        seconds = self.countdownRemainingSeconds()
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        second = seconds % 60
+        if hours:
+            return "计时 %02d:%02d:%02d" % (hours, minutes, second)
+        return "计时 %02d:%02d" % (minutes, second)
+
+    def refreshCountdownStatus(self):
+        """同步计时器状态到顶部状态框和定时面板。"""
+        if self.countdown_deadline_ms is None:
+            return
+
+        text = self.countdownStatusText()
+        self.view.ui_status_text.setText(text)
+        self.view.ui_timing_panel.setCountdownStatus(text)
 
     def refreshAutoState(self):
         """刷新自动阅读状态 UI"""
@@ -375,6 +417,7 @@ class WindowView(QMainWindow):
         """全书完"""
         self.schedule_owned_reading = False
         self.countdown_deadline_ms = None
+        self.view.ui_timing_panel.setCountdownStatus("未运行")
         self.setAutoReading(False, "已读完")
         self.activateWindow()
         self.showNormal()
@@ -501,9 +544,6 @@ class WindowView(QMainWindow):
         return now_ms >= start or now_ms < stop
 
     def isInsideTimingSegmentNow(self) -> bool:
-        if not gPreferences.get(UserKey.Timing.Enabled):
-            return False
-
         now_ms = QTime.currentTime().msecsSinceStartOfDay()
         return any(
             segment.get('enabled', True) and self.isTimeInSegment(now_ms, segment)
@@ -514,11 +554,11 @@ class WindowView(QMainWindow):
         """定时阅读状态机。"""
         self.handleCountdown()
         self.handleTimingTasks()
+        self.refreshCountdownStatus()
 
     def handleTimingTasks(self):
         """根据每日时间段启动或停止自动阅读。"""
-        enabled = gPreferences.get(UserKey.Timing.Enabled)
-        inside_segment = self.isInsideTimingSegmentNow() if enabled else False
+        inside_segment = self.isInsideTimingSegmentNow()
 
         if not inside_segment:
             self.schedule_suppressed_until_exit = False
@@ -548,6 +588,7 @@ class WindowView(QMainWindow):
         self.countdown_deadline_ms = None
         self.schedule_owned_reading = False
         self.schedule_suppressed_until_exit = self.isInsideTimingSegmentNow()
+        self.view.ui_timing_panel.setCountdownStatus("已结束")
         if self.view.ui_act_auto.isChecked():
             self.setAutoReading(False, "计时结束，已停止")
         else:
@@ -564,10 +605,12 @@ class WindowView(QMainWindow):
         self.schedule_owned_reading = False
         self.schedule_suppressed_until_exit = False
         self.setAutoReading(True, "计时阅读中")
+        self.refreshCountdownStatus()
 
     def onCountdownStopped(self):
         """取消计时器，不改变当前阅读状态。"""
         self.countdown_deadline_ms = None
+        self.view.ui_timing_panel.setCountdownStatus("未运行")
         self.refreshStatusTip("")
 
     def onAutoReading(self):
@@ -616,6 +659,9 @@ class WindowView(QMainWindow):
     def onToolbarSetAuto(self):
         """切换自动阅读"""
         checked = self.view.ui_act_auto.isChecked()
+        if not checked and self.countdown_deadline_ms is not None:
+            self.countdown_deadline_ms = None
+            self.view.ui_timing_panel.setCountdownStatus("未运行")
         self.schedule_owned_reading = False
         self.schedule_suppressed_until_exit = (not checked) and self.isInsideTimingSegmentNow()
         self.setAutoReading(checked)
@@ -634,7 +680,16 @@ class WindowView(QMainWindow):
         self.view.ui_cef.doSpeed()
         self.refreshSpeed()
 
-    @staticmethod
-    def onToolbarTiming():
-        """打开定时视图"""
-        TimingView().exec()
+    def setTimingPanelVisible(self, visible: bool):
+        """展开或收起顶部定时面板。"""
+        self.view.ui_timing_panel.setVisible(visible)
+        self.view.ui_act_timing.blockSignals(True)
+        self.view.ui_act_timing.setChecked(visible)
+        self.view.ui_act_timing.blockSignals(False)
+        self.view.ui_act_timing.setText("收起定时" if visible else "定时")
+        QTimer.singleShot(0, self.syncCefGeometry)
+        QTimer.singleShot(120, self.syncCefGeometry)
+
+    def onToolbarTiming(self):
+        """展开或收起定时面板。"""
+        self.setTimingPanelVisible(not self.view.ui_timing_panel.isVisible())

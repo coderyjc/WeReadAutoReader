@@ -67,19 +67,22 @@ conda run -n wxreader-py37 python -m pip install -r requirements.txt -i https://
 
 - 程序入口是 `app/Application.py`。
 - 主窗口逻辑在 `app/ui/view/WindowView.py`。
-- 定时任务和计时器 UI 在 `app/ui/view/TimingView.py`。
+- 定时任务和计时器 UI 在 `app/ui/view/TimingView.py`；当前是嵌入主窗口顶部控制栏下方的 `TimingPanel`，不是独立弹窗。
 - CEF 嵌入和 Python/JS 绑定在 `app/ui/view/CefView.py`。
 - 微信读书页面自动化逻辑主要在 `resources/js/inject.js`，高度依赖微信读书 DOM class；如果微信读书改版，优先检查这里。
 - 当前 Python/JS 绑定只保留自动阅读相关能力：`doScroll`、`nextChapter`、`alert`、`updateState`、`sendAction`。
 - 不要把帮助、关于、赞助、笔记导出、全屏、通知等旧功能加回来；用户明确要求删除，并且此项目自用，不当完整阅读器。
 - 主界面不展示 URL，不提供步幅调节；`+/-` 每次固定调整速度 1。
-- 顶部控制栏不要再把标题、状态、操作按钮、速度条和 URL 塞进同一个 `QGridLayout`。旧布局在窗口较窄或旧配置尺寸下会导致按钮重叠、速度条显示不全；当前结构是标题/状态一行、按钮一行、速度条一行。
+- 顶部控制栏不要再把标题、状态、操作按钮、速度条和 URL 塞进同一个 `QGridLayout`。旧布局在窗口较窄或旧配置尺寸下会导致按钮重叠、速度条显示不全；当前结构是标题/状态一行，操作按钮和 1-10 速度条同一行。
 - CEF 子窗口首次创建时可能拿到布局前的小尺寸，表现为微信读书网页缩在左上角。当前通过 `CefView.syncBrowserGeometry()` 和 `WindowView.showEvent/resizeEvent` 延迟同步尺寸，不要删掉这些同步调用。
 - 每日任务不要再用“当前秒 == 开始秒/结束秒”的精确字符串比较。当前逻辑判断“当前时间是否处于任一启用时间段内”，可避免轮询错过触发秒。
+- 定时面板已经没有每日任务全局总开关；调度只看每条时间段自己的 `enabled` 状态，UI 上对应单条时间段的 `启用` / `停用` 按钮。
 - 每日任务只停止自己开启的自动阅读；用户手动开启的自动阅读不会被每日任务结束时间误停。
 - 计时器是一次性命令：启动后立即开启自动阅读，到点停止。若计时器在每日任务时间段内停止阅读，会抑制同一时间段内的自动重启，直到离开该时间段。
+- 计时器运行时，右上角状态框会显示 `计时 mm:ss` 或 `计时 hh:mm:ss`，不要再用普通 reader status tip 覆盖读秒。
+- 用户手动暂停自动阅读时会取消当前一次性计时器，避免状态框继续读秒但实际没有阅读。
 - `CefModel.ShortCut.values` 只能放无修饰键快捷键；不要把 `Quit` 放进去，否则用户在网页里按普通 `Q` 也可能触发退出。退出只走 `Alt+Q` 分支。
-- `F12` 当前打开定时自动阅读窗口，不再打开通知设置。
+- `F12` 当前展开/收起顶部定时面板，不再打开通知设置或独立窗口。
 - 用户配置由 `app/helper/Preferences.py` 管理，写入 JSON；历史上放弃过 `QSettings`，不要无准备混用两套配置。
 - 新增或修改 `resources/` 后需要重新生成 Qt 资源：
 
@@ -97,7 +100,7 @@ conda run -n wxreader-py37 python .\bundle.py -V 2.0.2.1 -C
 
 - `bundle.py` 会先生成 `scripts/package/dist/WxReader/WxReader.exe`，再生成便携 zip。CEF/PySide6 是 onedir 程序，不能只复制单个 `WxReader.exe` 到别处运行，必须带上同目录依赖，或者直接使用 `WxReader_v<version>_Portable.zip`。
 - 当前机器没有可用的 `makensis` 命令；`bundle.py` 会打印 `'makensis' is not recognized...`，但脚本没有检查返回码，会误报安装包已生成。实际是否有安装包要检查 `scripts/package/WxReader_v<version>_Installer.exe` 是否存在。
-- 当前前端视觉方向是渐变日间主题：浅奶油、浅蓝和暖橙渐变，主按钮使用蓝绿渐变，定时窗口分为任务面板和计时器面板。相关样式分布在 `app/ui/view/WindowView.py`、`app/ui/view/TimingView.py` 和 `resources/theme/default.qss`。
+- 当前前端视觉方向是渐变日间主题：浅奶油、浅蓝和暖橙渐变，主按钮使用蓝绿渐变，定时展开面板分为任务面板和计时器面板。相关样式分布在 `app/ui/view/WindowView.py`、`app/ui/view/TimingView.py` 和 `resources/theme/default.qss`。
 - 阅读速度范围已经收窄到 1-10。旧配置里大于 10 的速度值会被夹到 10；不要再恢复 1-100 的滑块。
 - 如果修改 `resources/theme/default.qss`，必须重新运行 `conda run -n wxreader-py37 python .\scripts\rcc\Rcc.py`，否则应用启动读取的 Qt 资源仍可能是旧 QSS。
 
