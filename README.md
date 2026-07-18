@@ -150,7 +150,9 @@ conda run -n wxreader-py37 python -m pip install -r requirements.txt -i https://
 │   ├── run-conda.ps1        # Conda 启动脚本
 │   ├── rcc/Rcc.py           # 生成 Qt 资源文件
 │   └── package/             # 打包脚本
-├── assets/banner.png        # 仓库首页图
+├── assets/
+│   ├── app-icon.png         # 应用图标源图
+│   └── banner.png           # 仓库首页图
 ├── codex.md                 # 后续 AI/开发者维护注意事项
 ├── environment.yml          # Conda 环境定义
 └── requirements.txt         # pip 依赖
@@ -188,8 +190,9 @@ conda run -n wxreader-py37 python -m pip install -r requirements.txt -i https://
 
 `app/ui/view/CefView.py` 负责嵌入 CEF，并建立 Python 与 JS 的双向调用。
 
-- Python 调 JS：`doScroll`、`nextChapter`、`alert`
+- Python 调 JS：`doScroll`、`alert`
 - JS 调 Python：`updateState`、`sendAction`
+- 翻到下一节：JS 判断到底后通知 Python，Python 通过 CEF `SendKeyEvent` 直接发送右箭头按键
 
 `resources/js/inject.js` 是自动阅读的关键文件。微信读书页面结构如果变化，优先检查这里的 DOM 选择器。
 

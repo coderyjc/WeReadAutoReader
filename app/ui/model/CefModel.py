@@ -61,7 +61,6 @@ class CefModel:
 
     class JsMethod:
         """Py to Js Binding"""
-        NextChapter = 'nextChapter'
         DoScroll = 'doScroll'
         Alert = 'alert'
 

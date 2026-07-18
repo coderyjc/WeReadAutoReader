@@ -31,6 +31,17 @@ def applyCustomExceptionProxy():
     sys.excepthook = cef.ExceptHook
 
 
+def flushCefCookieStore():
+    """退出前尽量把 CEF Cookie 存储刷盘。"""
+    try:
+        manager = cef.CookieManager.GetGlobalManager()
+        if manager and manager.FlushStore():
+            cef.MessageLoopWork()
+    except Exception as error:
+        if Config.DEBUG:
+            print("Flush CEF cookie store failed:", error)
+
+
 def main():
     # 调试模式?
     Config.DEBUG = '--DEBUG' in sys.argv
@@ -70,7 +81,7 @@ def main():
         "windowless_rendering_enabled": True,
         "persist_user_preferences": True,
         "persist_session_cookies": True,
-        "log_file": Cmm.appStorageAt(),
+        "log_file": join(Cmm.appStorageAt(), "cef.log"),
         "cache_path": Cmm.appStorageAt(),
         "context_menu": {"enabled": False},
     }
@@ -89,6 +100,7 @@ def main():
     app.exec()
 
     # 释放 CEF
+    flushCefCookieStore()
     del win
     del app
     cef.Shutdown()

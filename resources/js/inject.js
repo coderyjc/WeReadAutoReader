@@ -1,47 +1,5 @@
 // --------------------------- 基础支持 ---------------------------
 
-/**
- * 在元素上模拟鼠标按下事件
- * @param {string|HTMLElement} selector
- */
-function pressMouseKey(selector) {
-    let element = (selector instanceof HTMLElement) ? selector : document.querySelector(selector);
-    if (element) {
-        let clickEvent = document.createEvent('MouseEvent');
-        clickEvent.initMouseEvent(
-            'click',
-            false,
-            false,
-            window,
-            0,
-            0,
-            0,
-            0,
-            0,
-            false,
-            false,
-            false,
-            false,
-            0,
-            null
-        );
-        element.dispatchEvent(clickEvent);
-        return true;
-    }
-    return false;
-}
-
-/**
- * 模拟发送键盘事件
- * @param {number} key_code
- */
-function fireKeyEvent(key_code) {
-    const ke = new KeyboardEvent('keydown', {
-        bubbles: true, cancelable: true, keyCode: key_code
-    });
-    document.body.dispatchEvent(ke);
-}
-
 // --------------------------- 缓存数据 ---------------------------
 
 const Action = {
@@ -50,8 +8,12 @@ const Action = {
 }
 
 const Cache = {
-    HasSelection: false
+    HasSelection: false,
+    LastScrollToEndAt: 0
 }
+
+const SCROLL_END_THRESHOLD = 48;
+const SCROLL_END_ACTION_COOLDOWN = 2500;
 
 // --------------------------- 选中状态 ---------------------------
 
@@ -102,9 +64,11 @@ function watchSelection() {
             }
         })
     });
-    observer_container.observe(element_container, {
-        childList: true,
-    });
+    if (element_container) {
+        observer_container.observe(element_container, {
+            childList: true,
+        });
+    }
 
     const element_catalog = document.querySelector('.readerCatalog');
     const element_note = document.querySelector('.readerNotePanel');
@@ -115,17 +79,50 @@ function watchSelection() {
 // --------------------------- 自动滚动 ---------------------------
 
 /**
+ * 页面滚动元素
+ */
+function getScrollElement() {
+    return document.scrollingElement || document.documentElement || document.body;
+}
+
+/**
+ * 当前滚动高度
+ */
+function getScrollTop() {
+    const element = getScrollElement();
+    return window.pageYOffset || element.scrollTop || document.documentElement.scrollTop || document.body.scrollTop || 0;
+}
+
+/**
  * 是否已滚动到底部
  */
 function isScrollToEnd() {
-    // 变量scrollTop是滚动条滚动时，滚动条上端距离顶部的距离
-    const scrollTop = document.documentElement.scrollTop || document.body.scrollTop;
-    // 变量windowHeight是可视区的高度
-    const windowHeight = document.documentElement.clientHeight || document.body.clientHeight;
-    // 变量scrollHeight是滚动条的总高度（当前可滚动的页面的总高度）
-    const scrollHeight = document.documentElement.scrollHeight || document.body.scrollHeight;
-    // 滚动条到底部
-    return scrollTop + windowHeight >= scrollHeight;
+    const element = getScrollElement();
+    const scrollTop = getScrollTop();
+    const windowHeight = window.innerHeight || element.clientHeight || document.documentElement.clientHeight || document.body.clientHeight || 0;
+    const scrollHeight = Math.max(
+        element.scrollHeight || 0,
+        document.documentElement.scrollHeight || 0,
+        document.body.scrollHeight || 0
+    );
+    return scrollTop + windowHeight >= scrollHeight - SCROLL_END_THRESHOLD;
+}
+
+/**
+ * 防止到底时重复触发翻页
+ */
+function notifyScrollToEnd() {
+    const now = Date.now();
+    if (now - Cache.LastScrollToEndAt < SCROLL_END_ACTION_COOLDOWN) {
+        return;
+    }
+    Cache.LastScrollToEndAt = now;
+    if (isReadingFinished()) {
+        notifyReadingFinished();
+        return;
+    }
+    updateState('正在切换下一页');
+    sendAction(Action.ScrollToEnd);
 }
 
 /**
@@ -134,31 +131,43 @@ function isScrollToEnd() {
 function watchScroll() {
     document.onscroll = function () {
         if (isScrollToEnd()) {
-            sendAction(Action.ScrollToEnd);
+            notifyScrollToEnd();
         }
     };
 }
 
 /**
- * 切换下一章
+ * 元素是否可见
  */
-function nextChapter() {
-    if (isPageLoading()) return;
+function isVisible(element) {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    const rect = element.getBoundingClientRect();
+    return style.display !== 'none' && style.visibility !== 'hidden' && rect.width > 0 && rect.height > 0;
+}
 
-    let element = document.querySelector('.readerFooter_button');
-    if (element) {
-        // 下一章: 按下向右按键（按键码39）
-        updateState('正在切换下一章')
-        fireKeyEvent(39);
-    } else {
-        // 找不到下一章时，查看全文是否已结束
-        let done = document.querySelector('.readerFooter_ending');
-        if (done) {
-            updateState('全书完.');
-            sendAction(Action.ReadingFinished);
-            alert('全书完.')
-        }
+/**
+ * 是否已经读完全书
+ */
+function isReadingFinished() {
+    const done = document.querySelector('.readerFooter_ending, [class*="readerFooter"][class*="ending"], [class*="Ending"]');
+    if (done && isVisible(done)) {
+        return true;
     }
+
+    const text = (document.body.innerText || '').slice(-1000);
+    return ['全书完', '已读完', '阅读完', '没有更多'].some(function (keyword) {
+        return text.indexOf(keyword) >= 0;
+    });
+}
+
+/**
+ * 通知 Python 全书已读完
+ */
+function notifyReadingFinished() {
+    updateState('全书完.');
+    sendAction(Action.ReadingFinished);
+    alert('全书完.');
     Cache.HasSelection = false;
 }
 
@@ -186,12 +195,17 @@ function doScroll(offset_y = 0) {
     }
 
     if (isScrollToEnd()) {
-        sendAction(Action.ScrollToEnd);
+        notifyScrollToEnd();
         return;
     }
 
-    const top = (document.documentElement.scrollTop || document.body.scrollTop) + offset_y;
-    scroll({left: 0, top: top, behavior: 'auto'});
+    const element = getScrollElement();
+    const top = getScrollTop() + offset_y;
+    if (element && element.scrollTo) {
+        element.scrollTo({left: 0, top: top, behavior: 'auto'});
+    } else {
+        window.scrollTo({left: 0, top: top, behavior: 'auto'});
+    }
     updateState(`自动阅读中...`);
 }
 

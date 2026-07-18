@@ -12,6 +12,9 @@ from helper.Signals import gSignals
 from ui.model.CefModel import CefModel
 
 
+KEY_RIGHT_ARROW = 39
+
+
 class ClientHandler(object):
     """CEF浏览器事件监听"""
 
@@ -204,7 +207,25 @@ class CefView(QWidget):
     def doPageTurning(self):
         """翻页/下一章"""
         if self.isReading() and self.scrollable() and self.handler.is_ready:
-            self.executeFunction(CefModel.JsMethod.NextChapter)
+            self.sendRightArrowKey()
+
+    def sendRightArrowKey(self):
+        """向 CEF 浏览器发送原生右箭头按键。"""
+        if not self.browser:
+            return
+
+        cef.WindowUtils().OnSetFocus(self.handleId(), 0, 0, 0)
+        self.browser.SetFocus(True)
+        key_event = {
+            "windows_key_code": KEY_RIGHT_ARROW,
+            "character": KEY_RIGHT_ARROW,
+            "unmodified_character": KEY_RIGHT_ARROW,
+            "modifiers": cef.EVENTFLAG_NONE,
+        }
+        key_event["type"] = cef.KEYEVENT_RAWKEYDOWN
+        self.browser.SendKeyEvent(key_event)
+        key_event["type"] = cef.KEYEVENT_KEYUP
+        self.browser.SendKeyEvent(key_event)
 
     # noinspection PyMethodMayBeStatic
     def doReadingFinished(self):

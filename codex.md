@@ -70,7 +70,8 @@ conda run -n wxreader-py37 python -m pip install -r requirements.txt -i https://
 - 定时任务和计时器 UI 在 `app/ui/view/TimingView.py`；当前是嵌入主窗口顶部控制栏下方的 `TimingPanel`，不是独立弹窗。
 - CEF 嵌入和 Python/JS 绑定在 `app/ui/view/CefView.py`。
 - 微信读书页面自动化逻辑主要在 `resources/js/inject.js`，高度依赖微信读书 DOM class；如果微信读书改版，优先检查这里。
-- 当前 Python/JS 绑定只保留自动阅读相关能力：`doScroll`、`nextChapter`、`alert`、`updateState`、`sendAction`。
+- 自动翻页主路径：`inject.js` 只判断是否到底和是否全书完；真正翻到下一节由 `CefView.sendRightArrowKey()` 通过 CEF `browser.SendKeyEvent()` 发送右箭头。不要再回退到点击 `.readerFooter_button` 作为主路径。
+- 当前 Python/JS 绑定只保留自动阅读相关能力：`doScroll`、`alert`、`updateState`、`sendAction`。
 - 不要把帮助、关于、赞助、笔记导出、全屏、通知等旧功能加回来；用户明确要求删除，并且此项目自用，不当完整阅读器。
 - 主界面不展示 URL，不提供步幅调节；`+/-` 每次固定调整速度 1。
 - 顶部控制栏不要再把标题、状态、操作按钮、速度条和 URL 塞进同一个 `QGridLayout`。旧布局在窗口较窄或旧配置尺寸下会导致按钮重叠、速度条显示不全；当前结构是标题/状态一行，操作按钮和 1-10 速度条同一行。
@@ -90,6 +91,7 @@ conda run -n wxreader-py37 python -m pip install -r requirements.txt -i https://
 conda run -n wxreader-py37 python .\scripts\rcc\Rcc.py
 ```
 
+- 当前应用图标源图保存在 `assets/app-icon.png`，运行资源是 `resources/icon/app.ico`。替换图标后必须重新运行上面的 RCC 命令，否则应用启动时仍可能使用旧的内嵌图标。
 - `scripts/rcc/Rcc.py` 已修过一个坑：旧版使用相对 `__file__` 且不等待 `pyside6-rcc`，可能生成空的 `app/conf/Resources.py`。如果资源导入报 `qInitResources` 缺失，优先检查资源生成是否成功。
 - 打包命令优先使用 Conda 环境：
 
@@ -103,6 +105,7 @@ conda run -n wxreader-py37 python .\bundle.py -V 2.0.2.1 -C
 - 当前前端视觉方向是渐变日间主题：浅奶油、浅蓝和暖橙渐变，主按钮使用蓝绿渐变，定时展开面板分为任务面板和计时器面板。相关样式分布在 `app/ui/view/WindowView.py`、`app/ui/view/TimingView.py` 和 `resources/theme/default.qss`。
 - 阅读速度范围已经收窄到 1-10。旧配置里大于 10 的速度值会被夹到 10；不要再恢复 1-100 的滑块。
 - 如果修改 `resources/theme/default.qss`，必须重新运行 `conda run -n wxreader-py37 python .\scripts\rcc\Rcc.py`，否则应用启动读取的 Qt 资源仍可能是旧 QSS。
+- 登录态依赖 CEF `cache_path` 和微信读书服务端 Cookie 策略。当前退出前会调用 `CookieManager.FlushStore()` 尽量刷盘；如果隔天仍丢登录态，可能是官方会话过期或风控策略，本地侧不一定能完全修复。
 
 ## 后续维护建议
 
